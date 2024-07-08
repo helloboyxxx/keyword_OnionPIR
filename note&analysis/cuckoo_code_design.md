@@ -67,6 +67,8 @@ function generate_cuckoo_query(keyword, h1, h2) {
 }
 ```
 
+#### TODO: How to determine which returned result correspond to the keyword?
+
 
 
 
