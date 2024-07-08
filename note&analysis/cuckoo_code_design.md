@@ -24,7 +24,7 @@ function generate_cuckoo_data (F, hashed_key_width, max_iter, entry_size){
 		h1, h2 := fresh hash functions mapping from any key to [num_entries]
 		// First, we generate all data.
 		data := Entry vector[num_entries]
-		for j := 0...num_entries-1 do {
+		for j := 0...num_entries-1 do {	// ? maybe use actual keyword here and put the generation of keyword in test function
 			data[j] := generate_kv_pair(F, j, hashed_key_width, entry_size)
 		}
 		// Then, we insert them using cuckoo hashing subroutine.
@@ -44,7 +44,7 @@ Helper function `generate_kv_pair`.
 ```pseudocode
 function generate_kv_pair(F, key_id, hashed_key_width, entry_size) {
 	// F is a hash function for hashing key to a bit string of length hashed_key_width.
-	hashed_key := F(key_id, hashed_key_width)
+	hashed_key := F(key_id, hashed_key_width)	// ? using keyword instead of id?
 	value := byte vector[entry_size - hashed_key_width]
 	Entry := hashed_key||value
 	Return Entry
@@ -67,7 +67,18 @@ function generate_cuckoo_query(keyword, h1, h2) {
 }
 ```
 
-#### TODO: How to determine which returned result correspond to the keyword?
+```pseudocode
+function receive_result(F, keyword, hashed_key_width, result1, result2) {
+	hashed_key := F(keyword, hashed_key_width)
+	if result1[:hashed_key_width] == hashed_key {
+		Return result1
+	} else if result2[:hashed_key_width] == hashed_key {
+		Return result2
+	} else {
+		Report Error
+	}
+}
+```
 
 
 
