@@ -1,3 +1,5 @@
+#include "MurmurHash3.h"
+#include "pir.h"
 #include "server.h"
 #include "external_prod.h"
 #include "utils.h"
@@ -292,7 +294,14 @@ std::vector<Key> cuckoo_insert(uint64_t seed1, uint64_t seed2, size_t swap_limit
     bool inserted = false;
     for (size_t j = 0; j < swap_limit; ++j) {
       // hash the holding keyword to indices in the table
-      size_t index1 = std::hash<Key>{}(holding ^ seed1) % half_size;
+      // size_t index1 = std::hash<Key>{}(holding ^ seed1) % half_size;
+      // replace the above line with the following line to use the hasher.
+      size_t hash[4];
+      MurmurHash3_x64_128(&holding, sizeof(holding), seed1, hash);
+      for (int k = 0; k < 4; k++) {
+        DEBUG_PRINT("key" << holding << "hash:" << hash[k]);
+      }
+      size_t index1 = hash[0] % half_size;
       
       if (two_tables[index1] == 0) {
         two_tables[index1] = holding;
