@@ -6,6 +6,8 @@
 #include "utils.h"
 #include <iostream>
 #include <random>
+#include <chrono>
+
 
 #include <fstream>
 
@@ -26,9 +28,9 @@ void run_tests() {
   // bfv_example();
   // test_external_product();
 
-  // test_pir();
+  test_pir();
   // test_keyword_pir(); // two server version
-  test_cuckoo_keyword_pir(); // single server version
+  // test_cuckoo_keyword_pir(); // single server version
 
   PRINT_BAR;
   DEBUG_PRINT("Tests finished");
@@ -255,6 +257,7 @@ void test_keyword_pir() {
   std::hash<uint64_t> hasher;
   uint64_t seed1 = rng(), seed2 = rng();
   table_size -= 1;
+  uint64_t counter = 0;
   while (1) {
     std::cout << "attempt hash" << std::endl;
     for (int i = 0; i < table_size; i++) {
@@ -309,6 +312,7 @@ void test_keyword_pir() {
   server1.set_database(cuckoo1);
   server2.set_database(cuckoo2);
 
+  DEBUG_PRINT(counter);
   std::cout << "DB set" << std::endl;
 
   PirClient client(pir_params);
@@ -357,6 +361,13 @@ void test_keyword_pir() {
   }
 }
 
+uint64_t getCurrentTimeAsUint64() {
+  auto now = std::chrono::system_clock::now();
+  auto epoch = now.time_since_epoch();
+  auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(epoch).count();
+  return static_cast<uint64_t>(milliseconds);
+}
+
 void test_cuckoo_keyword_pir() {
   print_func_name(__FUNCTION__);
   const int experiment_times = 1;
@@ -369,8 +380,9 @@ void test_cuckoo_keyword_pir() {
   PirServer server(pir_params);
 
   DEBUG_PRINT("Initializing server...");
-  uint64_t keyword_seed = 123123;
-  CuckooInitData keyword_data = server.gen_keyword_data(100, keyword_seed);
+  // uint64_t keyword_seed = getCurrentTimeAsUint64(); // use current time as seed
+  uint64_t keyword_seed = 0;
+  CuckooInitData keyword_data = server.gen_keyword_data(1000, keyword_seed);
 
   if (keyword_data.inserted_data.size() == 0) {
     DEBUG_PRINT("Failed to insert data into cuckoo table. Exiting...");

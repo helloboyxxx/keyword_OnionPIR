@@ -74,15 +74,27 @@ CuckooInitData PirServer::gen_keyword_data(size_t max_iter, uint64_t keyword_see
       for (size_t j = 0; j < pir_params_.get_num_entries(); ++j) {
         // Keyword(string) -> hash to fixed size bit string
         Entry entry = generate_entry_with_id(keywords[j], entry_size, hashed_key_width);
-        size_t index1 = std::hash<Key>{}(keywords[j] ^ seed1) % cuckoo_hash_table.size();
-        size_t index2 = std::hash<Key>{}(keywords[j] ^ seed2) % cuckoo_hash_table.size(); 
+        size_t half_size = keywords.size();
+        size_t out1[4];
+        MurmurHash3_x86_128(&keywords[j], sizeof(keywords[j]), seed1, out1);
+        size_t index1 = out1[0] % half_size;
+        size_t out2[4];
+        MurmurHash3_x86_128(&keywords[j], sizeof(keywords[j]), seed2, out2);
+        size_t index2 = out2[0] % half_size + half_size;
         if (cuckoo_hash_table[index1] == keywords[j]) {
           data[index1] = entry;
-        } else {
+        } else if (cuckoo_hash_table[index2] == keywords[j]) {
           data[index2] = entry;
+        } else {
+          DEBUG_PRINT("Keyword not found " << keywords[j] << " at index1: " << cuckoo_hash_table[index1] << " at index2: " << cuckoo_hash_table[index2]);
+          for (size_t k = 0; k < half_size * 2; k++) {
+            if (cuckoo_hash_table[k] == keywords[j]) {
+              DEBUG_PRINT("Keyword found at index: " << k);
+            }
+          }
+          throw std::invalid_argument("Keyword not found");
         }
       }
-
       // set the database and return the used seeds and the database to the client. Data is returned for debugging purposes.
       set_database(data);
       return {used_seeds, data};
@@ -285,8 +297,9 @@ Entry generate_entry_with_id(uint64_t key_id, size_t entry_size, size_t hashed_k
 
 std::vector<Key> cuckoo_insert(uint64_t seed1, uint64_t seed2, size_t swap_limit,
                                  std::vector<Key> &keywords, float blowup_factor) {
-  std::vector<uint64_t> two_tables(keywords.size() * blowup_factor, 0); // cuckoo hash table for keywords
-  size_t half_size = two_tables.size();
+  // std::vector<uint64_t> two_tables(keywords.size() * blowup_factor, 0); // cuckoo hash table for keywords
+  std::vector<Key> two_tables(keywords.size() * 2, 0);  // ! fixed to TWO for testing purposes.
+  size_t half_size = two_tables.size() / 2;
 
   // loop and insert each key-value pair into the cuckoo hash table.
   // std::hash<Key> hasher;
@@ -299,9 +312,6 @@ std::vector<Key> cuckoo_insert(uint64_t seed1, uint64_t seed2, size_t swap_limit
       // size_t index1 = std::hash<Key>{}(holding ^ seed1) % half_size;
       // replace the above line with the following line to use the hasher.
       size_t out1[4];
-      // for (int k = 0; k < 4; k++) {
-      //   DEBUG_PRINT(out1[k]);
-      // }
       MurmurHash3_x86_128(&holding, sizeof(holding), seed1, out1);
       size_t index1 = out1[0] % half_size;
       // DEBUG_PRINT(index1);
@@ -310,19 +320,13 @@ std::vector<Key> cuckoo_insert(uint64_t seed1, uint64_t seed2, size_t swap_limit
         inserted = true;
         break;
       }
-      // DEBUG_PRINT("holding was: " << holding << " on index1 was: " << index1);
       std::swap(holding, two_tables[index1]); // swap the holding value with the value in the table
-      // DEBUG_PRINT("holding now: " << holding << " on index1 now: " << index1);
-      
       // hash the holding keyword to another index in the table
       // size_t index2 = (std::hash<Key>{}(holding ^ seed2) % half_size);
       // replace the above line with the following line to use the hasher.
       size_t out2[4];
-      // for (int k = 0; k < 4; k++) {
-      //   DEBUG_PRINT(out2[k]);
-      // }
       MurmurHash3_x86_128(&holding, sizeof(holding), seed2, out2);
-      size_t index2 = out2[0] % half_size;
+      size_t index2 = out2[0] % half_size + half_size;
       // DEBUG_PRINT(index2);
       // assert(index1 + half_size != index2); // two hash functions should not hash to the same "index".
       if (two_tables[index2] == 0) {
@@ -330,9 +334,7 @@ std::vector<Key> cuckoo_insert(uint64_t seed1, uint64_t seed2, size_t swap_limit
         inserted = true;
         break;
       }
-      // DEBUG_PRINT("holding was: " << holding << " on index2 was: " << index1);
       std::swap(holding, two_tables[index2]); // swap the holding value with the value in the table
-      // DEBUG_PRINT("holding now: " << holding << " on index2 now: " << index1);
     }
     if (inserted == false) {
       DEBUG_PRINT("num_inserted: " << i << " keyword: " << keywords[i]);
@@ -344,7 +346,7 @@ std::vector<Key> cuckoo_insert(uint64_t seed1, uint64_t seed2, size_t swap_limit
       // size_t holding_index2 = (std::hash<Key>{}(holding ^ seed2) % half_size);
       size_t out2[4];
       MurmurHash3_x86_128(&holding, sizeof(holding), seed2, out2);
-      size_t holding_index2 = out2[0] % half_size;
+      size_t holding_index2 = out2[0] % half_size + half_size;
 
       Key first = two_tables[holding_index1];
       Key second = two_tables[holding_index2];
@@ -359,7 +361,7 @@ std::vector<Key> cuckoo_insert(uint64_t seed1, uint64_t seed2, size_t swap_limit
       // size_t first_index2 = (std::hash<Key>{}(first ^ seed2) % half_size);
       size_t out2_[4];
       MurmurHash3_x86_128(&first, sizeof(first), seed2, out2_);
-      size_t first_index2 = out2_[0] % half_size;
+      size_t first_index2 = out2_[0] % half_size + half_size;
       DEBUG_PRINT("first_index1: " << first_index1 << " first_index2: " << first_index2);
 
       // the two hashed indices for second
@@ -370,7 +372,7 @@ std::vector<Key> cuckoo_insert(uint64_t seed1, uint64_t seed2, size_t swap_limit
       // size_t second_index2 = (std::hash<Key>{}(second ^ seed2) % half_size);
       size_t out2__[4];
       MurmurHash3_x86_128(&second, sizeof(second), seed2, out2__);
-      size_t second_index2 = out2__[0] % half_size;
+      size_t second_index2 = out2__[0] % half_size + half_size;
       DEBUG_PRINT("second_index1: " << second_index1 << " second_index2: " << second_index2 << "\n");
 
       return {};  // return an empty vector if the insertion is not successful.

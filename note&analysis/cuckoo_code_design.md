@@ -52,9 +52,6 @@ function generate_kv_pair(F, key_id, hashed_key_width, entry_size) {
 ```
 
 
-
-
-
 ### Client design
 
 ```pseudocode

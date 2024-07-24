@@ -1,5 +1,4 @@
 #include "pir.h"
-
 #include <cassert>
 
 seal::EncryptionParameters PirParams::get_seal_params() const { return seal_params_; }
