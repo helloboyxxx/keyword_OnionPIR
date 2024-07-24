@@ -1,4 +1,5 @@
 #include "MurmurHash2.h"
+#include "MurmurHash3.h"
 #include "pir.h"
 #include "server.h"
 #include "external_prod.h"
@@ -61,7 +62,7 @@ CuckooInitData PirServer::gen_keyword_data(size_t max_iter, uint64_t keyword_see
     uint64_t seed1 = key_rng();
     uint64_t seed2 = key_rng();
     used_seeds.push_back({seed1, seed2});
-    DEBUG_PRINT("Trying seeds: " << seed1 << " " << seed2);
+    // DEBUG_PRINT("Trying seeds: " << seed1 << " " << seed2);
     std::vector<Key> cuckoo_hash_table = cuckoo_insert(seed1, seed2, 100, keywords, pir_params_.get_blowup_factor());
     // now we have a successful insertion. We create the database using the keywords we have and their corresponding values.
     if (cuckoo_hash_table.size() > 0) {
@@ -288,7 +289,7 @@ std::vector<Key> cuckoo_insert(uint64_t seed1, uint64_t seed2, size_t swap_limit
   size_t half_size = two_tables.size();
 
   // loop and insert each key-value pair into the cuckoo hash table.
-  std::hash<Key> hasher;
+  // std::hash<Key> hasher;
   for (size_t i = 0; i < keywords.size(); ++i) {
     Key holding = keywords[i]; // initialy holding is the keyword. Also used for swapping.
     // insert the holding value
@@ -297,8 +298,12 @@ std::vector<Key> cuckoo_insert(uint64_t seed1, uint64_t seed2, size_t swap_limit
       // hash the holding keyword to indices in the table
       // size_t index1 = std::hash<Key>{}(holding ^ seed1) % half_size;
       // replace the above line with the following line to use the hasher.
-      size_t index1 = MurmurHash64A(&holding, sizeof(holding), seed1);
-      index1 = index1 % half_size;
+      size_t out1[4];
+      // for (int k = 0; k < 4; k++) {
+      //   DEBUG_PRINT(out1[k]);
+      // }
+      MurmurHash3_x86_128(&holding, sizeof(holding), seed1, out1);
+      size_t index1 = out1[0] % half_size;
       // DEBUG_PRINT(index1);
       if (two_tables[index1] == 0) {
         two_tables[index1] = holding;
@@ -312,8 +317,12 @@ std::vector<Key> cuckoo_insert(uint64_t seed1, uint64_t seed2, size_t swap_limit
       // hash the holding keyword to another index in the table
       // size_t index2 = (std::hash<Key>{}(holding ^ seed2) % half_size);
       // replace the above line with the following line to use the hasher.
-      size_t index2 = MurmurHash64B(&holding, sizeof(holding), seed2);
-      index2 = index2 % half_size;
+      size_t out2[4];
+      // for (int k = 0; k < 4; k++) {
+      //   DEBUG_PRINT(out2[k]);
+      // }
+      MurmurHash3_x86_128(&holding, sizeof(holding), seed2, out2);
+      size_t index2 = out2[0] % half_size;
       // DEBUG_PRINT(index2);
       // assert(index1 + half_size != index2); // two hash functions should not hash to the same "index".
       if (two_tables[index2] == 0) {
@@ -326,31 +335,43 @@ std::vector<Key> cuckoo_insert(uint64_t seed1, uint64_t seed2, size_t swap_limit
       // DEBUG_PRINT("holding now: " << holding << " on index2 now: " << index1);
     }
     if (inserted == false) {
-      // DEBUG_PRINT("num_inserted: " << i << "keyword: " << keywords[i]);
-      // // print the two indices that are causing the problem.
-      // // size_t holding_index1 = std::hash<Key>{}(holding ^ seed1) % half_size;
-      // size_t holding_index1 = MurmurHash64A(&holding, sizeof(holding), seed1) % half_size;
-      // // size_t holding_index2 = (std::hash<Key>{}(holding ^ seed2) % half_size);
-      // size_t holding_index2 = MurmurHash64B(&holding, sizeof(holding), seed2) % half_size;
+      DEBUG_PRINT("num_inserted: " << i << " keyword: " << keywords[i]);
+      // print the two indices that are causing the problem.
+      // size_t holding_index1 = std::hash<Key>{}(holding ^ seed1) % half_size;
+      size_t out1[4];
+      MurmurHash3_x86_128(&holding, sizeof(holding), seed1, out1);
+      size_t holding_index1 = out1[0] % half_size;
+      // size_t holding_index2 = (std::hash<Key>{}(holding ^ seed2) % half_size);
+      size_t out2[4];
+      MurmurHash3_x86_128(&holding, sizeof(holding), seed2, out2);
+      size_t holding_index2 = out2[0] % half_size;
 
-      // Key first = two_tables[holding_index1];
-      // Key second = two_tables[holding_index2];
-      // DEBUG_PRINT("index1: " << holding_index1 << " index2: " << holding_index2);
-      // DEBUG_PRINT("first: " << first << " second: " << second << " holding: " << holding);
+      Key first = two_tables[holding_index1];
+      Key second = two_tables[holding_index2];
+      DEBUG_PRINT("index1: " << holding_index1 << " index2: " << holding_index2);
+      DEBUG_PRINT("first: " << first << " second: " << second << " holding: " << holding);
       
-      // // the two hashed indices for first
-      // // size_t first_index1 = std::hash<Key>{}(first ^ seed1) % half_size;
-      // size_t first_index1 = MurmurHash64A(&first, sizeof(first), seed1) % half_size;
-      // // size_t first_index2 = (std::hash<Key>{}(first ^ seed2) % half_size);
-      // size_t first_index2 = MurmurHash64B(&first, sizeof(first), seed2) % half_size;
-      // DEBUG_PRINT("first_index1: " << first_index1 << " first_index2: " << first_index2);
+      // the two hashed indices for first
+      // size_t first_index1 = std::hash<Key>{}(first ^ seed1) % half_size;
+      size_t out1_[4];
+      MurmurHash3_x86_128(&first, sizeof(first), seed1, out1_);
+      size_t first_index1 = out1_[0] % half_size;
+      // size_t first_index2 = (std::hash<Key>{}(first ^ seed2) % half_size);
+      size_t out2_[4];
+      MurmurHash3_x86_128(&first, sizeof(first), seed2, out2_);
+      size_t first_index2 = out2_[0] % half_size;
+      DEBUG_PRINT("first_index1: " << first_index1 << " first_index2: " << first_index2);
 
-      // // the two hashed indices for second
-      // // size_t second_index1 = std::hash<Key>{}(second ^ seed1) % half_size;
-      // size_t second_index1 = MurmurHash64A(&second, sizeof(second), seed1) % half_size;
-      // // size_t second_index2 = (std::hash<Key>{}(second ^ seed2) % half_size);
-      // size_t second_index2 = MurmurHash64B(&second, sizeof(second), seed2) % half_size;
-      // DEBUG_PRINT("second_index1: " << second_index1 << " second_index2: " << second_index2 << "\n");
+      // the two hashed indices for second
+      // size_t second_index1 = std::hash<Key>{}(second ^ seed1) % half_size;
+      size_t out1__[4];
+      MurmurHash3_x86_128(&second, sizeof(second), seed1, out1__);
+      size_t second_index1 = out1__[0] % half_size;
+      // size_t second_index2 = (std::hash<Key>{}(second ^ seed2) % half_size);
+      size_t out2__[4];
+      MurmurHash3_x86_128(&second, sizeof(second), seed2, out2__);
+      size_t second_index2 = out2__[0] % half_size;
+      DEBUG_PRINT("second_index1: " << second_index1 << " second_index2: " << second_index2 << "\n");
 
       return {};  // return an empty vector if the insertion is not successful.
     }
