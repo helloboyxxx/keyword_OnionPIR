@@ -185,10 +185,11 @@ PirQuery PirClient::generate_query(std::uint64_t entry_index) {
  * @param keyword keyword to be searched
  * @return std::vector<PirQuery> two queries generated
  */
-std::vector<PirQuery> PirClient::generate_cuckoo_query(uint64_t seed1, uint64_t seed2, uint64_t table_size, Key keyword) {
+std::vector<PirQuery> PirClient::generate_cuckoo_query(uint64_t seed1, uint64_t seed2, uint64_t num_entries, Key keyword) {
   // size_t index1 = std::hash<Key>{}(keyword ^ seed1) % table_size;
   // size_t index2 = std::hash<Key>{}(keyword ^ seed2) % table_size;
-  size_t half_size = table_size / 2;
+  size_t half_size = num_entries;
+  // DEBUG_PRINT("half size in query: " << half_size);
   size_t out1[4];
   MurmurHash3_x86_128(&keyword, sizeof(keyword), seed1, out1);
   size_t index1 = out1[0] % half_size;
@@ -197,6 +198,7 @@ std::vector<PirQuery> PirClient::generate_cuckoo_query(uint64_t seed1, uint64_t 
   size_t index2 = out2[0] % half_size + half_size;
   PirQuery query1 = PirClient::generate_query(index1);
   PirQuery query2 = PirClient::generate_query(index2);
+  DEBUG_PRINT("indexes for query: " << index1 << " " << index2);
   return {query1, query2};
 }
 
@@ -210,16 +212,17 @@ std::vector<PirQuery> PirClient::generate_cuckoo_query(uint64_t seed1, uint64_t 
  * @param reply1 
  * @param reply2 
  */
-void PirClient::cuckoo_process_reply(uint64_t seed1, uint64_t seed2, uint64_t table_size, Key keyword, std::vector<seal::Ciphertext> reply1, std::vector<seal::Ciphertext> reply2) {
+void PirClient::cuckoo_process_reply(uint64_t seed1, uint64_t seed2, uint64_t num_entries, Key keyword, std::vector<seal::Ciphertext> reply1, std::vector<seal::Ciphertext> reply2) {
   // size_t index1 = std::hash<Key>{}(keyword ^ seed1) % table_size;
   // size_t index2 = std::hash<Key>{}(keyword ^ seed2) % table_size;
-  size_t half_size = table_size / 2;
+  size_t half_size = num_entries;
   size_t out1[4];
   MurmurHash3_x86_128(&keyword, sizeof(keyword), seed1, out1);
   size_t index1 = out1[0] % half_size;
   size_t out2[4];
   MurmurHash3_x86_128(&keyword, sizeof(keyword), seed2, out2);
   size_t index2 = out2[0] % half_size + half_size;
+  // DEBUG_PRINT("indexes in reply: " << index1 << " " << index2);
   Entry entry1 = PirClient::get_entry_from_plaintext(index1, PirClient::decrypt_result(reply1)[0]);
   Entry entry2 = PirClient::get_entry_from_plaintext(index2, PirClient::decrypt_result(reply2)[0]);
   // check which entry has hashed keyword in the first half of the entry

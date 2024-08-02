@@ -36,7 +36,8 @@ void PirServer::gen_data() {
 CuckooInitData PirServer::gen_keyword_data(size_t max_iter, uint64_t keyword_seed) {
   // Generate random keywords for the database.
   std::vector<Key> keywords;
-  size_t key_num = pir_params_.get_num_entries() / pir_params_.get_blowup_factor(); // TODO: put this as pir params
+  // size_t key_num = pir_params_.get_num_entries() / pir_params_.get_blowup_factor(); // TODO: put this as pir params
+  size_t key_num = pir_params_.get_num_entries(); 
   keywords.reserve(key_num);
   // We randomly generate a bunch of keywords. Then, we treat each keyword in the key-value pair as a seed.
   // In this the current method, all keyword is generated using the same keyword_seed given by client.
@@ -44,7 +45,10 @@ CuckooInitData PirServer::gen_keyword_data(size_t max_iter, uint64_t keyword_see
   for (size_t i = 0; i < key_num; ++i) {
     keywords.push_back(key_rng()); 
   }
-
+  // print the first 10 keywords
+  // for (size_t i = 0; i < 10; i++) {
+  //   DEBUG_PRINT("Keyword: " << keywords[i]);
+  // }
   DEBUG_PRINT(keywords.size() << " keywords generated");
   // check if the keywords are all unique: 
   std::unordered_set<Key> unique_keywords(keywords.begin(), keywords.end());
@@ -63,38 +67,49 @@ CuckooInitData PirServer::gen_keyword_data(size_t max_iter, uint64_t keyword_see
     uint64_t seed2 = key_rng();
     used_seeds.push_back({seed1, seed2});
     // DEBUG_PRINT("Trying seeds: " << seed1 << " " << seed2);
+    // DEBUG_PRINT("keyword size before cuckoo_insert: " << keywords.size());
     std::vector<Key> cuckoo_hash_table = cuckoo_insert(seed1, seed2, 100, keywords, pir_params_.get_blowup_factor());
+    // DEBUG_PRINT("keyword size after cuckoo_insert: " << keywords.size());
     // now we have a successful insertion. We create the database using the keywords we have and their corresponding values.
     if (cuckoo_hash_table.size() > 0) {
       std::vector<Entry> data(key_num); 
-      
       // we insert key-value pair one by one. Generating the entries on the fly.
       size_t entry_size = pir_params_.get_entry_size();
       size_t hashed_key_width = pir_params_.get_hashed_key_width();
+      size_t half_size = keywords.size();
+      std::ofstream file;
+      file.open("cuckoo_hash_table.txt", std::ios_base::app);
+      // DEBUG_PRINT(pir_params_.get_num_entries());
       for (size_t j = 0; j < pir_params_.get_num_entries(); ++j) {
         // Keyword(string) -> hash to fixed size bit string
-        Entry entry = generate_entry_with_id(keywords[j], entry_size, hashed_key_width);
-        size_t half_size = keywords.size();
+        Key entry_key = keywords[j];
+        Entry entry = generate_entry_with_id(entry_key, entry_size, hashed_key_width);
         size_t out1[4];
-        MurmurHash3_x86_128(&keywords[j], sizeof(keywords[j]), seed1, out1);
+        MurmurHash3_x86_128(&entry_key, sizeof(entry_key), seed1, out1);
         size_t index1 = out1[0] % half_size;
         size_t out2[4];
-        MurmurHash3_x86_128(&keywords[j], sizeof(keywords[j]), seed2, out2);
+        MurmurHash3_x86_128(&entry_key, sizeof(entry_key), seed2, out2);
         size_t index2 = out2[0] % half_size + half_size;
-        if (cuckoo_hash_table[index1] == keywords[j]) {
+        if (cuckoo_hash_table[index1] == entry_key) {
           data[index1] = entry;
-        } else if (cuckoo_hash_table[index2] == keywords[j]) {
+          // write index, key, and entry to a file for debugging purposes.
+          file << "Index: " << index1 << " Key: " << entry_key << std::endl;
+        } else if (cuckoo_hash_table[index2] == entry_key) {
           data[index2] = entry;
+          // write index, key, and entry to a file for debugging purposes.
+          file << "Index: " << index2 << " Key: " << entry_key << std::endl;
         } else {
-          DEBUG_PRINT("Keyword not found " << keywords[j] << " at index1: " << cuckoo_hash_table[index1] << " at index2: " << cuckoo_hash_table[index2]);
-          for (size_t k = 0; k < half_size * 2; k++) {
-            if (cuckoo_hash_table[k] == keywords[j]) {
-              DEBUG_PRINT("Keyword found at index: " << k);
-            }
-          }
+          // DEBUG_PRINT("Index1 hash: " << index1 << " Index2 hash: " << index2);
+          // DEBUG_PRINT("No. " << j << " Keyword not found " << entry_key << " key at index1: " << cuckoo_hash_table[index1] << " key at index2: " << cuckoo_hash_table[index2]);
+          // for (size_t k = 0; k < half_size * 2; k++) {
+          //   if (cuckoo_hash_table[k] == entry_key) {
+          //     DEBUG_PRINT("Keyword found at index: " << k);
+          //   }
+          // }
           throw std::invalid_argument("Keyword not found");
         }
       }
+      file.close();
       // set the database and return the used seeds and the database to the client. Data is returned for debugging purposes.
       set_database(data);
       return {used_seeds, data};
@@ -287,10 +302,14 @@ Entry generate_entry_with_id(uint64_t key_id, size_t entry_size, size_t hashed_k
 
   Entry entry;
   entry.reserve(entry_size);
-  std::mt19937_64 rng(key_id);
-  // generate the entire entry using random numbers for simplicity.
-  for (int i = 0; i < entry_size; i++) {
-    entry.push_back(rng() % 256);
+  // std::mt19937_64 rng(key_id);
+  // // generate the entire entry using random numbers for simplicity.
+  // for (int i = 0; i < entry_size; i++) {
+  //   entry.push_back(rng() % 256);
+  // }
+  // ! testing only. The value is generated using the same key_id.
+  for (int i = 0; i < hashed_key_width; i++) {
+    entry.push_back(key_id);
   }
   return entry;
 }
@@ -300,7 +319,8 @@ std::vector<Key> cuckoo_insert(uint64_t seed1, uint64_t seed2, size_t swap_limit
   // std::vector<uint64_t> two_tables(keywords.size() * blowup_factor, 0); // cuckoo hash table for keywords
   std::vector<Key> two_tables(keywords.size() * 2, 0);  // ! fixed to TWO for testing purposes.
   size_t half_size = two_tables.size() / 2;
-
+  // DEBUG_PRINT("half size in generation: " << half_size);
+  // DEBUG_PRINT(keywords.size() << " keywords to be inserted");
   // loop and insert each key-value pair into the cuckoo hash table.
   // std::hash<Key> hasher;
   for (size_t i = 0; i < keywords.size(); ++i) {
