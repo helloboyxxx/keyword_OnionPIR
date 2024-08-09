@@ -155,211 +155,211 @@ void test_external_product() {
 
 
 // Testing Onion PIR scheme 
-void test_pir() {
-  print_func_name(__FUNCTION__);
+// void test_pir() {
+//   print_func_name(__FUNCTION__);
 
-  const int experiment_times = 1;
+//   const int experiment_times = 1;
   
-  // setting parameters for PIR scheme
-  // - Database size = 2^15
-  // - Number of dimensions = 8
-  // - Number of entries = 2^15
-  // - Entry size = 12000 bytes
-  // - l = 9  (parameter for GSW scheme)
-  // - l_key = 9 (Not sure for now)
-  PirParams pir_params(1 << 15, 8, 1 << 15, 12000, 9, 9);
-  pir_params.print_values();
-  PirServer server(pir_params); // Initialize the server with the parameters
+//   // setting parameters for PIR scheme
+//   // - Database size = 2^15
+//   // - Number of dimensions = 8
+//   // - Number of entries = 2^15
+//   // - Entry size = 12000 bytes
+//   // - l = 9  (parameter for GSW scheme)
+//   // - l_key = 9 (Not sure for now)
+//   PirParams pir_params(1 << 15, 8, 1 << 15, 12000, 9, 9);
+//   pir_params.print_values();
+//   PirServer server(pir_params); // Initialize the server with the parameters
 
 
-  DEBUG_PRINT("Initializing server...");
-  // Data to be stored in the database.
-  std::vector<Entry> data(pir_params.get_num_entries());
+//   DEBUG_PRINT("Initializing server...");
+//   // Data to be stored in the database.
+//   std::vector<Entry> data(pir_params.get_num_entries());
 
-  // Generate random data for each entry in the database. 
-  // The entry id will be used as the seed for the random number generator.
-  for (int i = 0; i < pir_params.get_num_entries(); i++) {
-    data[i] = generate_entry(i, pir_params.get_entry_size());
-  }
-  server.set_database(data);
+//   // Generate random data for each entry in the database. 
+//   // The entry id will be used as the seed for the random number generator.
+//   for (int i = 0; i < pir_params.get_num_entries(); i++) {
+//     data[i] = generate_entry(i, pir_params.get_entry_size());
+//   }
+//   server.set_database(data);
 
 
-  // DEBUG_PRINT("Initializing client...");
+//   // DEBUG_PRINT("Initializing client...");
 
-  // Run the query process many times.
-  for (int i = 0; i < experiment_times; i++) {
-    srand(time(0)); // reset the seed for the random number generator
-    // Initialize the client
-    PirClient client(pir_params);
-    const int client_id = rand();
-    DEBUG_PRINT("Client ID: " << client_id);
+//   // Run the query process many times.
+//   for (int i = 0; i < experiment_times; i++) {
+//     srand(time(0)); // reset the seed for the random number generator
+//     // Initialize the client
+//     PirClient client(pir_params);
+//     const int client_id = rand();
+//     DEBUG_PRINT("Client ID: " << client_id);
 
-    // 
-    server.decryptor_ = client.get_decryptor();
-    server.set_client_galois_key(client_id, client.create_galois_keys());
-    server.set_client_gsw_key(client_id, client.generate_gsw_from_key());
+//     // 
+//     server.decryptor_ = client.get_decryptor();
+//     server.set_client_galois_key(client_id, client.create_galois_keys());
+//     server.set_client_gsw_key(client_id, client.generate_gsw_from_key());
 
-    // === Client start generating query ===
-    size_t entry_index = rand() % pir_params.get_num_entries();
+//     // === Client start generating query ===
+//     size_t entry_index = rand() % pir_params.get_num_entries();
 
-    auto c_start_time = CURR_TIME;  // client start time for the query
-    auto query = client.generate_query(entry_index);
+//     auto c_start_time = CURR_TIME;  // client start time for the query
+//     auto query = client.generate_query(entry_index);
     
-    auto s_start_time = CURR_TIME;  // server start time for processing the query
-    auto result = server.make_query(client_id, std::move(query));
-    auto s_end_time = CURR_TIME;
+//     auto s_start_time = CURR_TIME;  // server start time for processing the query
+//     auto result = server.make_query(client_id, std::move(query));
+//     auto s_end_time = CURR_TIME;
     
-    // client gets result from the server and decrypts it
-    auto decrypted_result = client.decrypt_result(result);
-    Entry entry = client.get_entry_from_plaintext(entry_index, decrypted_result[0]);
-    auto c_end_time = CURR_TIME;
+//     // client gets result from the server and decrypts it
+//     auto decrypted_result = client.decrypt_result(result);
+//     Entry entry = client.get_entry_from_plaintext(entry_index, decrypted_result[0]);
+//     auto c_end_time = CURR_TIME;
     
-    DEBUG_PRINT("Server Time: " << TIME_DIFF(s_start_time, s_end_time) << " ms");
-    DEBUG_PRINT("Client Time: " << TIME_DIFF(c_start_time, c_end_time) - TIME_DIFF(s_start_time, s_end_time) << " ms");
-    DEBUG_PRINT("Noise budget left: " << client.get_decryptor()->invariant_noise_budget(result[0]));
+//     DEBUG_PRINT("Server Time: " << TIME_DIFF(s_start_time, s_end_time) << " ms");
+//     DEBUG_PRINT("Client Time: " << TIME_DIFF(c_start_time, c_end_time) - TIME_DIFF(s_start_time, s_end_time) << " ms");
+//     DEBUG_PRINT("Noise budget left: " << client.get_decryptor()->invariant_noise_budget(result[0]));
 
-    if (entry == data[entry_index]) {
-      std::cout << "Success!" << std::endl;
-    } else {
-      std::cout << "Failure!" << std::endl;
+//     if (entry == data[entry_index]) {
+//       std::cout << "Success!" << std::endl;
+//     } else {
+//       std::cout << "Failure!" << std::endl;
 
-      std::cout << "Result:\t";
-      print_entry(entry);
-      std::cout << "Data:\t";
-      print_entry(data[entry_index]);
-    }
-    PRINT_BAR;
-  }
-}
+//       std::cout << "Result:\t";
+//       print_entry(entry);
+//       std::cout << "Data:\t";
+//       print_entry(data[entry_index]);
+//     }
+//     PRINT_BAR;
+//   }
+// }
 
-void test_keyword_pir() {
-  print_func_name(__FUNCTION__);
-  int table_size = 1 << 15;
-  PirParams pir_params(table_size, 8, table_size, 12000, 9, 9);
-  pir_params.print_values();
-  const int client_id = 0;
-  PirServer server1(pir_params), server2(pir_params);
+// void test_keyword_pir() {
+//   print_func_name(__FUNCTION__);
+//   int table_size = 1 << 15;
+//   PirParams pir_params(table_size, 8, table_size, 12000, 9, 9);
+//   pir_params.print_values();
+//   const int client_id = 0;
+//   PirServer server1(pir_params), server2(pir_params);
 
-  int num_entries = table_size;
-  std::vector<uint64_t> keywords;
-  std::vector<Entry> data(num_entries);
+//   int num_entries = table_size;
+//   std::vector<uint64_t> keywords;
+//   std::vector<Entry> data(num_entries);
 
-  std::vector<uint64_t> t1(table_size), t2(table_size);
-  std::vector<Entry> cuckoo1(table_size), cuckoo2(table_size);
+//   std::vector<uint64_t> t1(table_size), t2(table_size);
+//   std::vector<Entry> cuckoo1(table_size), cuckoo2(table_size);
 
-  std::mt19937_64 rng;
-  for (int i = 0; i < num_entries; i++) {
-    uint64_t keyword = rng();
-    keywords.push_back(keyword);
-    data[i] = generate_entry_with_id(keyword, pir_params.get_entry_size(), 8);  // 8 in Zhikun's code
-  }
+//   std::mt19937_64 rng;
+//   for (int i = 0; i < num_entries; i++) {
+//     uint64_t keyword = rng();
+//     keywords.push_back(keyword);
+//     data[i] = generate_entry_with_id(keyword, pir_params.get_entry_size(), 8);  // 8 in Zhikun's code
+//   }
 
-  std::hash<uint64_t> hasher;
-  uint64_t seed1 = rng(), seed2 = rng();
-  table_size -= 1;
-  uint64_t counter = 0;
-  while (1) {
-    std::cout << "attempt hash" << std::endl;
-    for (int i = 0; i < table_size; i++) {
-      t1[i] = t2[i] = 0;
-    }
-    seed1 = rng();
-    seed2 = rng();
-    DEBUG_PRINT("Seed1: " << seed1 << " Seed2: " << seed2);
-    for (int i = 0; i < num_entries; i++) {
-      uint64_t x = keywords[i];
-      bool success = false;
-      for (int j = 0; j < 100; j++) {
-        if (t1[hasher(x ^ seed1) % table_size] == 0) {
-          t1[hasher(x ^ seed1) % table_size] = x;
-          success = true;
-          break;
-        }
-        std::swap(x, t1[hasher(x ^ seed1) % table_size]);
-        if (t2[hasher(x ^ seed2) % table_size] == 0) {
-          t2[hasher(x ^ seed2) % table_size] = x;
-          success = true;
-          break;
-        }
-        std::swap(x, t2[hasher(x ^ seed2) % table_size]);
-      }
-      if (!success) {
-        goto nxt;
-      }
-    }
-    break;
-  nxt:;
-  }
+//   std::hash<uint64_t> hasher;
+//   uint64_t seed1 = rng(), seed2 = rng();
+//   table_size -= 1;
+//   uint64_t counter = 0;
+//   while (1) {
+//     std::cout << "attempt hash" << std::endl;
+//     for (int i = 0; i < table_size; i++) {
+//       t1[i] = t2[i] = 0;
+//     }
+//     seed1 = rng();
+//     seed2 = rng();
+//     DEBUG_PRINT("Seed1: " << seed1 << " Seed2: " << seed2);
+//     for (int i = 0; i < num_entries; i++) {
+//       uint64_t x = keywords[i];
+//       bool success = false;
+//       for (int j = 0; j < 100; j++) {
+//         if (t1[hasher(x ^ seed1) % table_size] == 0) {
+//           t1[hasher(x ^ seed1) % table_size] = x;
+//           success = true;
+//           break;
+//         }
+//         std::swap(x, t1[hasher(x ^ seed1) % table_size]);
+//         if (t2[hasher(x ^ seed2) % table_size] == 0) {
+//           t2[hasher(x ^ seed2) % table_size] = x;
+//           success = true;
+//           break;
+//         }
+//         std::swap(x, t2[hasher(x ^ seed2) % table_size]);
+//       }
+//       if (!success) {
+//         goto nxt;
+//       }
+//     }
+//     break;
+//   nxt:;
+//   }
 
-  // write the hashed indices to files
-  std::ofstream index1_file("/Users/sam/Desktop/college/CS/Crypto/PIR/keyword_OnionPIR/temp/ind1.txt");
-  std::ofstream index2_file("/Users/sam/Desktop/college/CS/Crypto/PIR/keyword_OnionPIR/temp/ind2.txt");
+//   // write the hashed indices to files
+//   std::ofstream index1_file("/Users/sam/Desktop/college/CS/Crypto/PIR/keyword_OnionPIR/temp/ind1.txt");
+//   std::ofstream index2_file("/Users/sam/Desktop/college/CS/Crypto/PIR/keyword_OnionPIR/temp/ind2.txt");
 
-  for (int i = 0; i < num_entries; i++) {
-    uint64_t x = keywords[i];
-    index1_file << hasher(x ^ seed1) % table_size << std::endl;
-    index2_file << hasher(x ^ seed2) % table_size << std::endl;
-    if (t1[hasher(x ^ seed1) % table_size] == x) {
-      cuckoo1[hasher(x ^ seed1) % table_size] = data[i];
-    } else {
-      cuckoo2[hasher(x ^ seed2) % table_size] = data[i];
-    }
-  }
+//   for (int i = 0; i < num_entries; i++) {
+//     uint64_t x = keywords[i];
+//     index1_file << hasher(x ^ seed1) % table_size << std::endl;
+//     index2_file << hasher(x ^ seed2) % table_size << std::endl;
+//     if (t1[hasher(x ^ seed1) % table_size] == x) {
+//       cuckoo1[hasher(x ^ seed1) % table_size] = data[i];
+//     } else {
+//       cuckoo2[hasher(x ^ seed2) % table_size] = data[i];
+//     }
+//   }
 
-  index1_file.close();
-  index2_file.close();
+//   index1_file.close();
+//   index2_file.close();
 
-  server1.set_database(cuckoo1);
-  server2.set_database(cuckoo2);
+//   server1.set_database(cuckoo1);
+//   server2.set_database(cuckoo2);
 
-  DEBUG_PRINT(counter);
-  std::cout << "DB set" << std::endl;
+//   DEBUG_PRINT(counter);
+//   std::cout << "DB set" << std::endl;
 
-  PirClient client(pir_params);
-  std::cout << "Client initialized" << std::endl;
-  server1.decryptor_ = client.get_decryptor();
-  server1.set_client_galois_key(client_id, client.create_galois_keys());
-  server1.set_client_gsw_key(client_id, client.generate_gsw_from_key());
+//   PirClient client(pir_params);
+//   std::cout << "Client initialized" << std::endl;
+//   server1.decryptor_ = client.get_decryptor();
+//   server1.set_client_galois_key(client_id, client.create_galois_keys());
+//   server1.set_client_gsw_key(client_id, client.generate_gsw_from_key());
 
-  server2.decryptor_ = client.get_decryptor();
-  server2.set_client_galois_key(client_id, client.create_galois_keys());
-  server2.set_client_gsw_key(client_id, client.generate_gsw_from_key());
+//   server2.decryptor_ = client.get_decryptor();
+//   server2.set_client_galois_key(client_id, client.create_galois_keys());
+//   server2.set_client_gsw_key(client_id, client.generate_gsw_from_key());
 
-  std::cout << "Client registered" << std::endl;
+//   std::cout << "Client registered" << std::endl;
 
-  for (int i = 0; i < 1; i++) {
-    int id = rng() % num_entries;
-    auto query_id1 = hasher(keywords[id] ^ seed1) % table_size;
-    auto query_id2 = hasher(keywords[id] ^ seed2) % table_size;
-    auto query = client.generate_query(query_id1);
-    auto result = server1.make_query(client_id, std::move(query));
+//   for (int i = 0; i < 1; i++) {
+//     int id = rng() % num_entries;
+//     auto query_id1 = hasher(keywords[id] ^ seed1) % table_size;
+//     auto query_id2 = hasher(keywords[id] ^ seed2) % table_size;
+//     auto query = client.generate_query(query_id1);
+//     auto result = server1.make_query(client_id, std::move(query));
 
-    auto query2 = client.generate_query(query_id2);
-    auto result2 = server2.make_query(client_id, std::move(query2));
+//     auto query2 = client.generate_query(query_id2);
+//     auto result2 = server2.make_query(client_id, std::move(query2));
 
-    std::cout << "Result: " << std::endl;
-    std::cout << client.get_decryptor()->invariant_noise_budget(result[0]) << std::endl;
+//     std::cout << "Result: " << std::endl;
+//     std::cout << client.get_decryptor()->invariant_noise_budget(result[0]) << std::endl;
 
-    Entry entry1 = client.get_entry_from_plaintext(id, client.decrypt_result(result)[0]);
-    Entry entry2 = client.get_entry_from_plaintext(id, client.decrypt_result(result2)[0]);
+//     Entry entry1 = client.get_entry_from_plaintext(id, client.decrypt_result(result)[0]);
+//     Entry entry2 = client.get_entry_from_plaintext(id, client.decrypt_result(result2)[0]);
 
-    auto end_time0 = CURR_TIME;
+//     auto end_time0 = CURR_TIME;
 
-    if (entry1 == data[id]) {
-      std::cout << "Success with first query" << std::endl;
-    } else if (entry2 == data[id]) {
-      std::cout << "Success with second query" << std::endl;
-    } else {
-      std::cout << "Failure!" << std::endl;
+//     if (entry1 == data[id]) {
+//       std::cout << "Success with first query" << std::endl;
+//     } else if (entry2 == data[id]) {
+//       std::cout << "Success with second query" << std::endl;
+//     } else {
+//       std::cout << "Failure!" << std::endl;
 
-      std::cout << "Result:\t";
-      print_entry(entry1);
-      print_entry(entry2);
-      std::cout << "Data:\t";
-      print_entry(data[id]);
-    }
-  }
-}
+//       std::cout << "Result:\t";
+//       print_entry(entry1);
+//       print_entry(entry2);
+//       std::cout << "Data:\t";
+//       print_entry(data[id]);
+//     }
+//   }
+// }
 
 uint64_t getCurrentTimeAsUint64() {
   auto now = std::chrono::system_clock::now();
@@ -371,7 +371,6 @@ uint64_t getCurrentTimeAsUint64() {
 void test_cuckoo_keyword_pir() {
   print_func_name(__FUNCTION__);
   const int experiment_times = 1;
-
   const float blowup_factor = 2.0;
   const size_t DBSize_ = 1 << 16;
   const size_t num_entries = 1 << 16;
@@ -384,7 +383,7 @@ void test_cuckoo_keyword_pir() {
   uint64_t keyword_seed = 0;
   CuckooInitData keyword_data = server.gen_keyword_data(1000, keyword_seed);
 
-  if (keyword_data.inserted_data.size() == 0) {
+  if (keyword_data.inserted_data.size() == 0 || keyword_data.inserted_data2.size() == 0) {
     DEBUG_PRINT("Failed to insert data into cuckoo table. Exiting...");
     return;
   }
@@ -399,7 +398,7 @@ void test_cuckoo_keyword_pir() {
   for (int i = 0; i < experiment_times; i++) {
     srand(time(0));
     const int client_id = rand();
-    DEBUG_PRINT("Client ID: " << client_id);
+    // DEBUG_PRINT("Client ID: " << client_id);
 
     server.decryptor_ = client.get_decryptor();
     server.set_client_galois_key(client_id, client.create_galois_keys());
@@ -420,8 +419,9 @@ void test_cuckoo_keyword_pir() {
     // server start processing the query
     auto s_start_time = CURR_TIME;
     // we know that there is only two queries in the vector queries.
-    auto reply1 = server.make_query(client_id, std::move(queries[0]));
-    auto reply2 = server.make_query(client_id, std::move(queries[1]));
+    auto reply = server.make_query(client_id, std::move(queries[0]), std::move(queries[1]));
+    auto reply1 = reply[0];
+    auto reply2 = reply[1];
     auto s_end_time = CURR_TIME;
 
     // client start processing the reply
@@ -433,8 +433,5 @@ void test_cuckoo_keyword_pir() {
     DEBUG_PRINT("Client Time: " << TIME_DIFF(c_start_time, c_end_time) + TIME_DIFF(c2_start_time, c2_end_time) << " ms");
     DEBUG_PRINT("Noise budget left: " << client.get_decryptor()->invariant_noise_budget(reply1[0]));
     DEBUG_PRINT("Noise budget left: " << client.get_decryptor()->invariant_noise_budget(reply2[0]));
-
   }
-
-
 }

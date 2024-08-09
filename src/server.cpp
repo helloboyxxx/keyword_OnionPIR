@@ -30,7 +30,7 @@ void PirServer::gen_data() {
       data[i][j] = (rand() % 255);
     }
   }
-  set_database(data);
+  // set_database(data);
 }
 
 CuckooInitData PirServer::gen_keyword_data(size_t max_iter, uint64_t keyword_seed) {
@@ -73,6 +73,8 @@ CuckooInitData PirServer::gen_keyword_data(size_t max_iter, uint64_t keyword_see
     // now we have a successful insertion. We create the database using the keywords we have and their corresponding values.
     if (cuckoo_hash_table.size() > 0) {
       std::vector<Entry> data(key_num); 
+      std::vector<Entry> data2(key_num);
+      DEBUG_PRINT("cuckoo_hash_table size: " << cuckoo_hash_table.size() << " data size: " << data.size());
       // we insert key-value pair one by one. Generating the entries on the fly.
       size_t entry_size = pir_params_.get_entry_size();
       size_t hashed_key_width = pir_params_.get_hashed_key_width();
@@ -95,29 +97,118 @@ CuckooInitData PirServer::gen_keyword_data(size_t max_iter, uint64_t keyword_see
           // write index, key, and entry to a file for debugging purposes.
           file << "Index: " << index1 << " Key: " << entry_key << std::endl;
         } else if (cuckoo_hash_table[index2] == entry_key) {
-          data[index2] = entry;
+          data2[index2 - half_size] = entry;
+          // DEBUG_PRINT("Index2: " << index2 << " Data2 size: " << data2.size());
+          // data.at(index2) = entry;
           // write index, key, and entry to a file for debugging purposes.
           file << "Index: " << index2 << " Key: " << entry_key << std::endl;
         } else {
-          // DEBUG_PRINT("Index1 hash: " << index1 << " Index2 hash: " << index2);
-          // DEBUG_PRINT("No. " << j << " Keyword not found " << entry_key << " key at index1: " << cuckoo_hash_table[index1] << " key at index2: " << cuckoo_hash_table[index2]);
-          // for (size_t k = 0; k < half_size * 2; k++) {
-          //   if (cuckoo_hash_table[k] == entry_key) {
-          //     DEBUG_PRINT("Keyword found at index: " << k);
-          //   }
-          // }
+          DEBUG_PRINT("Index1 hash: " << index1 << " Index2 hash: " << index2);
+          DEBUG_PRINT("No. " << j << " Keyword not found " << entry_key << " key at index1: " << cuckoo_hash_table[index1] << " key at index2: " << cuckoo_hash_table[index2]);
+          for (size_t k = 0; k < half_size * 2; k++) {
+            if (cuckoo_hash_table[k] == entry_key) {
+              DEBUG_PRINT("Keyword found at index: " << k);
+            }
+          }
           throw std::invalid_argument("Keyword not found");
         }
       }
       file.close();
       // set the database and return the used seeds and the database to the client. Data is returned for debugging purposes.
-      set_database(data);
-      return {used_seeds, data};
+      set_database(data,data2);
+      return {used_seeds, data, data2};
     }
   }
   std::cerr << "Failed to insert data into cuckoo hash table" << std::endl;
   // resize the cuckoo_hash_table to 0
-  return {used_seeds, {}};
+  return {used_seeds, {}, {}};
+}
+
+std::vector<Key> cuckoo_insert(uint64_t seed1, uint64_t seed2, size_t swap_limit,
+                                 std::vector<Key> &keywords, float blowup_factor) {
+  // std::vector<uint64_t> two_tables(keywords.size() * blowup_factor, 0); // cuckoo hash table for keywords
+  std::vector<Key> two_tables(keywords.size() * 2, 0);  // ! fixed to TWO for testing purposes.
+  size_t half_size = two_tables.size() / 2;
+  // DEBUG_PRINT("half size in generation: " << half_size);
+  // DEBUG_PRINT(keywords.size() << " keywords to be inserted");
+  // loop and insert each key-value pair into the cuckoo hash table.
+  // std::hash<Key> hasher;
+  for (size_t i = 0; i < keywords.size(); ++i) {
+    Key holding = keywords[i]; // initialy holding is the keyword. Also used for swapping.
+    // insert the holding value
+    bool inserted = false;
+    for (size_t j = 0; j < swap_limit; ++j) {
+      // hash the holding keyword to indices in the table
+      // size_t index1 = std::hash<Key>{}(holding ^ seed1) % half_size;
+      // replace the above line with the following line to use the hasher.
+      size_t out1[4];
+      MurmurHash3_x86_128(&holding, sizeof(holding), seed1, out1);
+      size_t index1 = out1[0] % half_size;
+      // DEBUG_PRINT(index1);
+      if (two_tables[index1] == 0) {
+        two_tables[index1] = holding;
+        inserted = true;
+        break;
+      }
+      std::swap(holding, two_tables[index1]); // swap the holding value with the value in the table
+      // hash the holding keyword to another index in the table
+      // size_t index2 = (std::hash<Key>{}(holding ^ seed2) % half_size);
+      // replace the above line with the following line to use the hasher.
+      size_t out2[4];
+      MurmurHash3_x86_128(&holding, sizeof(holding), seed2, out2);
+      size_t index2 = out2[0] % half_size + half_size;
+      // DEBUG_PRINT(index2);
+      // assert(index1 + half_size != index2); // two hash functions should not hash to the same "index".
+      if (two_tables[index2] == 0) {
+        two_tables[index2] = holding;
+        inserted = true;
+        break;
+      }
+      std::swap(holding, two_tables[index2]); // swap the holding value with the value in the table
+    }
+    if (inserted == false) {
+      DEBUG_PRINT("num_inserted: " << i << " keyword: " << keywords[i]);
+      // print the two indices that are causing the problem.
+      // size_t holding_index1 = std::hash<Key>{}(holding ^ seed1) % half_size;
+      size_t out1[4];
+      MurmurHash3_x86_128(&holding, sizeof(holding), seed1, out1);
+      size_t holding_index1 = out1[0] % half_size;
+      // size_t holding_index2 = (std::hash<Key>{}(holding ^ seed2) % half_size);
+      size_t out2[4];
+      MurmurHash3_x86_128(&holding, sizeof(holding), seed2, out2);
+      size_t holding_index2 = out2[0] % half_size + half_size;
+
+      Key first = two_tables[holding_index1];
+      Key second = two_tables[holding_index2];
+      DEBUG_PRINT("index1: " << holding_index1 << " index2: " << holding_index2);
+      DEBUG_PRINT("first: " << first << " second: " << second << " holding: " << holding);
+      
+      // the two hashed indices for first
+      // size_t first_index1 = std::hash<Key>{}(first ^ seed1) % half_size;
+      size_t out1_[4];
+      MurmurHash3_x86_128(&first, sizeof(first), seed1, out1_);
+      size_t first_index1 = out1_[0] % half_size;
+      // size_t first_index2 = (std::hash<Key>{}(first ^ seed2) % half_size);
+      size_t out2_[4];
+      MurmurHash3_x86_128(&first, sizeof(first), seed2, out2_);
+      size_t first_index2 = out2_[0] % half_size + half_size;
+      DEBUG_PRINT("first_index1: " << first_index1 << " first_index2: " << first_index2);
+
+      // the two hashed indices for second
+      // size_t second_index1 = std::hash<Key>{}(second ^ seed1) % half_size;
+      size_t out1__[4];
+      MurmurHash3_x86_128(&second, sizeof(second), seed1, out1__);
+      size_t second_index1 = out1__[0] % half_size;
+      // size_t second_index2 = (std::hash<Key>{}(second ^ seed2) % half_size);
+      size_t out2__[4];
+      MurmurHash3_x86_128(&second, sizeof(second), seed2, out2__);
+      size_t second_index2 = out2__[0] % half_size + half_size;
+      DEBUG_PRINT("second_index1: " << second_index1 << " second_index2: " << second_index2 << "\n");
+
+      return {};  // return an empty vector if the insertion is not successful.
+    }
+  }
+  return two_tables;
 }
 
 // Computes a dot product between the selection vector and the database for the
@@ -200,7 +291,55 @@ PirServer::evaluate_first_dim_delayed_mod(std::vector<seal::Ciphertext> &selecti
     evaluator_.transform_from_ntt_inplace(ct_acc);  // transform
     result.push_back(ct_acc);
   }
+  return result;
+}
 
+std::vector<seal::Ciphertext>
+PirServer::evaluate_first_dim_delayed_mod2(std::vector<seal::Ciphertext> &selection_vector) {
+  int size_of_other_dims = DBSize_ / dims_[0];  // number of entries in the other dimensions
+  std::vector<seal::Ciphertext> result;
+  auto seal_params = context_.get_context_data(selection_vector[0].parms_id())->parms();
+  // auto seal_params =  context_.key_context_data()->parms();
+  auto coeff_modulus = seal_params.coeff_modulus();
+  size_t coeff_count = seal_params.poly_modulus_degree();
+  size_t coeff_mod_count = coeff_modulus.size();
+  size_t encrypted_ntt_size = selection_vector[0].size();
+  seal::Ciphertext ct_acc;
+
+  for (int i = 0; i < dims_[0]; i++) {
+    evaluator_.transform_to_ntt_inplace(selection_vector[i]); // transform the selection vector to ntt
+  }
+
+  for (int col_id = 0; col_id < size_of_other_dims; ++col_id) {
+    std::vector<std::vector<uint128_t>> buffer(
+        encrypted_ntt_size, std::vector<uint128_t>(coeff_count * coeff_mod_count, 0));
+    for (int i = 0; i < dims_[0]; i++) {
+      // std::cout << "i: " << i << std::endl;
+      for (size_t poly_id = 0; poly_id < encrypted_ntt_size; poly_id++) {
+        if (db2_[col_id + i * size_of_other_dims].has_value()) { // if the entry is not empty
+          utils::multiply_poly_acum(selection_vector[i].data(poly_id),
+                                    (*db2_[col_id + i * size_of_other_dims]).data(),
+                                    coeff_count * coeff_mod_count, buffer[poly_id].data()); 
+        }
+      }
+    }
+    ct_acc = selection_vector[0];
+    for (size_t poly_id = 0; poly_id < encrypted_ntt_size; poly_id++) {
+      auto ct_ptr = ct_acc.data(poly_id); // pointer to the data of the ciphertext
+      auto pt_ptr = buffer[poly_id];  // pointer to the buffer data
+      for (int mod_id = 0; mod_id < coeff_mod_count; mod_id++) {
+        auto mod_idx = (mod_id * coeff_count);
+
+        for (int coeff_id = 0; coeff_id < coeff_count; coeff_id++) {
+          pt_ptr[coeff_id + mod_idx] =
+              pt_ptr[coeff_id + mod_idx] % static_cast<__uint128_t>(coeff_modulus[mod_id].value()); // mod operation
+          ct_ptr[coeff_id + mod_idx] = static_cast<uint64_t>(pt_ptr[coeff_id + mod_idx]); // store the result in the ciphertext
+        }
+      }
+    }
+    evaluator_.transform_from_ntt_inplace(ct_acc);  // transform
+    result.push_back(ct_acc);
+  }
   return result;
 }
 
@@ -314,102 +453,18 @@ Entry generate_entry_with_id(uint64_t key_id, size_t entry_size, size_t hashed_k
   return entry;
 }
 
-std::vector<Key> cuckoo_insert(uint64_t seed1, uint64_t seed2, size_t swap_limit,
-                                 std::vector<Key> &keywords, float blowup_factor) {
-  // std::vector<uint64_t> two_tables(keywords.size() * blowup_factor, 0); // cuckoo hash table for keywords
-  std::vector<Key> two_tables(keywords.size() * 2, 0);  // ! fixed to TWO for testing purposes.
-  size_t half_size = two_tables.size() / 2;
-  // DEBUG_PRINT("half size in generation: " << half_size);
-  // DEBUG_PRINT(keywords.size() << " keywords to be inserted");
-  // loop and insert each key-value pair into the cuckoo hash table.
-  // std::hash<Key> hasher;
-  for (size_t i = 0; i < keywords.size(); ++i) {
-    Key holding = keywords[i]; // initialy holding is the keyword. Also used for swapping.
-    // insert the holding value
-    bool inserted = false;
-    for (size_t j = 0; j < swap_limit; ++j) {
-      // hash the holding keyword to indices in the table
-      // size_t index1 = std::hash<Key>{}(holding ^ seed1) % half_size;
-      // replace the above line with the following line to use the hasher.
-      size_t out1[4];
-      MurmurHash3_x86_128(&holding, sizeof(holding), seed1, out1);
-      size_t index1 = out1[0] % half_size;
-      // DEBUG_PRINT(index1);
-      if (two_tables[index1] == 0) {
-        two_tables[index1] = holding;
-        inserted = true;
-        break;
-      }
-      std::swap(holding, two_tables[index1]); // swap the holding value with the value in the table
-      // hash the holding keyword to another index in the table
-      // size_t index2 = (std::hash<Key>{}(holding ^ seed2) % half_size);
-      // replace the above line with the following line to use the hasher.
-      size_t out2[4];
-      MurmurHash3_x86_128(&holding, sizeof(holding), seed2, out2);
-      size_t index2 = out2[0] % half_size + half_size;
-      // DEBUG_PRINT(index2);
-      // assert(index1 + half_size != index2); // two hash functions should not hash to the same "index".
-      if (two_tables[index2] == 0) {
-        two_tables[index2] = holding;
-        inserted = true;
-        break;
-      }
-      std::swap(holding, two_tables[index2]); // swap the holding value with the value in the table
-    }
-    if (inserted == false) {
-      DEBUG_PRINT("num_inserted: " << i << " keyword: " << keywords[i]);
-      // print the two indices that are causing the problem.
-      // size_t holding_index1 = std::hash<Key>{}(holding ^ seed1) % half_size;
-      size_t out1[4];
-      MurmurHash3_x86_128(&holding, sizeof(holding), seed1, out1);
-      size_t holding_index1 = out1[0] % half_size;
-      // size_t holding_index2 = (std::hash<Key>{}(holding ^ seed2) % half_size);
-      size_t out2[4];
-      MurmurHash3_x86_128(&holding, sizeof(holding), seed2, out2);
-      size_t holding_index2 = out2[0] % half_size + half_size;
-
-      Key first = two_tables[holding_index1];
-      Key second = two_tables[holding_index2];
-      DEBUG_PRINT("index1: " << holding_index1 << " index2: " << holding_index2);
-      DEBUG_PRINT("first: " << first << " second: " << second << " holding: " << holding);
-      
-      // the two hashed indices for first
-      // size_t first_index1 = std::hash<Key>{}(first ^ seed1) % half_size;
-      size_t out1_[4];
-      MurmurHash3_x86_128(&first, sizeof(first), seed1, out1_);
-      size_t first_index1 = out1_[0] % half_size;
-      // size_t first_index2 = (std::hash<Key>{}(first ^ seed2) % half_size);
-      size_t out2_[4];
-      MurmurHash3_x86_128(&first, sizeof(first), seed2, out2_);
-      size_t first_index2 = out2_[0] % half_size + half_size;
-      DEBUG_PRINT("first_index1: " << first_index1 << " first_index2: " << first_index2);
-
-      // the two hashed indices for second
-      // size_t second_index1 = std::hash<Key>{}(second ^ seed1) % half_size;
-      size_t out1__[4];
-      MurmurHash3_x86_128(&second, sizeof(second), seed1, out1__);
-      size_t second_index1 = out1__[0] % half_size;
-      // size_t second_index2 = (std::hash<Key>{}(second ^ seed2) % half_size);
-      size_t out2__[4];
-      MurmurHash3_x86_128(&second, sizeof(second), seed2, out2__);
-      size_t second_index2 = out2__[0] % half_size + half_size;
-      DEBUG_PRINT("second_index1: " << second_index1 << " second_index2: " << second_index2 << "\n");
-
-      return {};  // return an empty vector if the insertion is not successful.
-    }
-  }
-  return two_tables;
-}
-
-std::vector<seal::Ciphertext> PirServer::make_query(uint32_t client_id, PirQuery &&query) {
+std::vector<std::vector<seal::Ciphertext> >
+PirServer::make_query(uint32_t client_id, PirQuery &&query, PirQuery &&query2) {
 
   // Query expansion
   auto exp_qry_start = CURR_TIME;
   std::vector<seal::Ciphertext> query_vector = expand_query(client_id, query);
+  std::vector<seal::Ciphertext> query_vector2 = expand_query(client_id, query2);
   auto exp_qry_end = CURR_TIME;
   DEBUG_PRINT("Query expansion time: " << TIME_DIFF(exp_qry_start, exp_qry_end) << " ms");
 
   std::vector<seal::Ciphertext> result = evaluate_first_dim_delayed_mod(query_vector);
+  std::vector<seal::Ciphertext> result2 = evaluate_first_dim_delayed_mod(query_vector2);
   // DEBUG_PRINT("NOISE budget: " << decryptor_->invariant_noise_budget(result[0]));
 
   std::cout << "Dim 0 time: " << TIME_DIFF(exp_qry_end, CURR_TIME) << " ms" << std::endl;
@@ -439,9 +494,33 @@ std::vector<seal::Ciphertext> PirServer::make_query(uint32_t client_id, PirQuery
     DEBUG_PRINT("Dim " << i << " external product time: \t" << TIME_DIFF(gsw_gen_end, ext_prod_end) << "\tms\n");
   }
 
+  for (int i = 1; i < dims_.size(); i++) {
+    auto gsw_gen_start = CURR_TIME;
+    
+    // ? Can we batch this operation outside the loop?
+    std::vector<seal::Ciphertext> lwe_vector; // BFV ciphertext, size l * 2. This vector will be reconstructed as a single RGSW ciphertext.
+    for (int k = 0; k < l; k++) {
+      lwe_vector.push_back(query_vector2[ptr]);
+      ptr += 1;
+    }
+    // Converting the BFV ciphertext to GSW ciphertext
+    GSWCiphertext gsw;
+    key_gsw.query_to_gsw(lwe_vector, client_gsw_keys_[client_id], gsw);
+
+    auto gsw_gen_end = CURR_TIME;
+
+    // Evaluate the external product
+    result2 = evaluate_gsw_product(result2, gsw);
+    auto ext_prod_end = CURR_TIME;  // external product time
+
+    DEBUG_PRINT("Dim " << i << " GSW generation time: \t" << TIME_DIFF(gsw_gen_start, gsw_gen_end) << "\tms");
+    DEBUG_PRINT("Dim " << i << " external product time: \t" << TIME_DIFF(gsw_gen_end, ext_prod_end) << "\tms\n");
+  }
+
   // modulus switching so to reduce the response size.
   evaluator_.mod_switch_to_next_inplace(result[0]); // result.size() == 1.
-  return result;
+  evaluator_.mod_switch_to_next_inplace(result2[0]); // result.size() == 1.
+  return {result, result2};
 }
 
 std::vector<seal::Ciphertext> PirServer::make_query_delayed_mod(uint32_t client_id,
@@ -462,13 +541,23 @@ std::vector<seal::Ciphertext> PirServer::make_query_regular_mod(uint32_t client_
   return result;
 }
 
-void PirServer::set_database(std::vector<Entry> &new_db) {
-  // db_ = Database();  // ! Deleted as this line is duplicated bellow.
+void PirServer::set_database(std::vector<Entry> &new_db, std::vector<Entry> &new_db2) {
 
   // Flattens data into vector of u8s and pads each entry with 0s to entry_size number of bytes.
   // This is actually resizing from entry.size() to pir_params_.get_entry_size()
   // This is redundent if the given entries uses the same pir parameters.
   for (Entry &entry : new_db) {
+    if (entry.size() != 0 && entry.size() <= pir_params_.get_entry_size()) {
+      entry.resize(pir_params_.get_entry_size(), 0);
+    }
+
+    if (entry.size() > pir_params_.get_entry_size()) {
+      // std::cout << entry.size() << std::endl;
+        std::invalid_argument("Entry size is too large");
+    }
+  }
+
+  for (Entry &entry : new_db2) {
     if (entry.size() != 0 && entry.size() <= pir_params_.get_entry_size()) {
       entry.resize(pir_params_.get_entry_size(), 0);
     }
@@ -547,6 +636,61 @@ void PirServer::set_database(std::vector<Entry> &new_db) {
     db_.push_back({});
   }
 
+  num_plaintexts = new_db2.size() / num_entries_per_plaintext;  // number of real plaintexts in the new database
+  
+  db2_ = Database(); // create an empty database2
+  db2_.reserve(DBSize_); // reserve space for DBSize_ elements as it will always be padded below.
+  
+  for (int i = 0; i < num_plaintexts; i++) {
+    seal::Plaintext plaintext(num_coeffs);
+
+    // Loop through the entries that corresponds to the current plaintext. 
+    // Then calculate the total size (in bytes) of this plaintext.
+    // NOTE: it is possible that some entry is empty, which has size 0.
+    int additive_sum_size = 0;
+    for (int j = num_entries_per_plaintext * i;
+         j < std::min(num_entries_per_plaintext * (i + 1), new_db2.size()); j++) {
+      additive_sum_size += new_db2[j].size();
+    }
+
+    if (additive_sum_size == 0) {
+      db2_.push_back({});  // push an empty std::optional<seal::Plaintext>. {} is equivalent to std::nullopt
+      continue;
+    }
+
+    int index = 0;  // index for the current coefficient to be filled
+    uint128_t data_buffer = 0;
+    size_t data_offset = 0;
+    // For each entry in the current plaintext
+    for (int j = num_entries_per_plaintext * i;
+         j < std::min(num_entries_per_plaintext * (i + 1), new_db2.size()); j++) {
+      // For each byte in this entry
+      for (int k = 0; k < pir_params_.get_entry_size(); k++) {
+        // data_buffer temporarily stores the data from entry bytes
+        data_buffer += uint128_t(new_db2[j][k]) << data_offset;
+        data_offset += 8;
+        // When we have enough data to fill a coefficient
+        // We will one by one fill the coefficients with the data_buffer.
+        while (data_offset >= bits_per_coeff) {
+          plaintext[index] = data_buffer & coeff_mask;
+          index++;
+          data_buffer >>= bits_per_coeff;
+          data_offset -= bits_per_coeff;
+        }
+      }
+    }
+    // add remaining data to a new coefficient
+    if (data_offset > 0) {
+      plaintext[index] = data_buffer & coeff_mask;
+      index++;
+    }
+    db2_.push_back(plaintext);
+  }
+  
+  for (size_t i = db2_.size(); i < DBSize_; i++) {
+    db2_.push_back({});
+  }
+
   // Process database
   preprocess_ntt();
 
@@ -555,6 +699,11 @@ void PirServer::set_database(std::vector<Entry> &new_db) {
 
 void PirServer::preprocess_ntt() {
   for (auto &plaintext : db_) {
+    if (plaintext.has_value()) {
+      evaluator_.transform_to_ntt_inplace(*plaintext, context_.first_parms_id());
+    }
+  }
+  for (auto &plaintext : db2_) {
     if (plaintext.has_value()) {
       evaluator_.transform_to_ntt_inplace(*plaintext, context_.first_parms_id());
     }

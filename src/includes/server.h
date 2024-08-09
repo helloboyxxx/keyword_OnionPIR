@@ -13,6 +13,7 @@ typedef std::pair<uint64_t, uint64_t> CuckooSeeds;
 struct CuckooInitData {
   std::vector<CuckooSeeds> used_seeds;  // all seeds used for constructing the cuckoo hash table
   std::vector<Entry> inserted_data; // database containing all inserted entries
+  std::vector<Entry> inserted_data2; // database containing all inserted entries
 };
 
 class PirServer {
@@ -33,11 +34,12 @@ public:
   /**
    * @brief Sets the server database using the provided vector of entries
    * @param new_db 
+   * @param new_db2
    */
-  void set_database(std::vector<Entry> &new_db);
+  void set_database(std::vector<Entry> &new_db, std::vector<Entry> &new_db2);
 
   // Given the client id and a packed client query, this function first unpacks the query, then returns the retrieved encrypted result.
-  std::vector<seal::Ciphertext> make_query(uint32_t client_id, PirQuery &&query);
+  std::vector<std::vector<seal::Ciphertext> > make_query(uint32_t client_id, PirQuery &&query, PirQuery &&query2);
   std::vector<seal::Ciphertext> make_query_delayed_mod(uint32_t client_id, PirQuery query);
   std::vector<seal::Ciphertext> make_query_regular_mod(uint32_t client_id, PirQuery query);
   std::vector<seal::Ciphertext> evaluate_gsw_product(std::vector<seal::Ciphertext> &result,
@@ -55,6 +57,7 @@ private:
   std::map<uint32_t, seal::GaloisKeys> client_galois_keys_;
   std::map<uint32_t, GSWCiphertext> client_gsw_keys_;
   Database db_;
+  Database db2_;
   PirParams pir_params_;
   size_t hashed_key_width_;
 
@@ -70,6 +73,8 @@ private:
   std::vector<seal::Ciphertext> evaluate_first_dim(std::vector<seal::Ciphertext> &selection_vector);
   std::vector<seal::Ciphertext>
   evaluate_first_dim_delayed_mod(std::vector<seal::Ciphertext> &selection_vector);
+  std::vector<seal::Ciphertext>
+  evaluate_first_dim_delayed_mod2(std::vector<seal::Ciphertext> &selection_vector);
 
   /*!
     Transforms the plaintexts in the database into their NTT representation.
