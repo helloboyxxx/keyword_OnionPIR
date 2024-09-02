@@ -189,40 +189,30 @@ void GSWEval::encrypt_plain_to_gsw(std::vector<uint64_t> const &plaintext,
   output.clear();
   assert(plaintext.size() == coeff_count * coeff_mod_count || plaintext.size() == coeff_count);
 
-  uint128_t pow2[coeff_mod_count][l + 1];
-  for (int i = 0; i < coeff_mod_count; i++) {
-    uint128_t mod = coeff_modulus[i].value();
-    uint128_t pow = 1;
-    for (int j = 0; j <= l; j++) {
-      pow2[i][j] = pow;
-      pow = (pow << base_log2) % mod;
-    }
-  }
+  // Create RGSW gadget.
+  std::vector<std::vector<__uint128_t>> gadget = gsw_gadget(l, base_log2, coeff_mod_count, coeff_modulus);
 
-  for (int poly_id = 0; poly_id <= 1; poly_id++) {
-    for (int i = l - 1; i >= 0; i--) {
+  // when poly_id = 0, we are working on the first half of the GSWCiphertext
+  for (int poly_id = 0; poly_id < 2; poly_id++) {
+    for (int k = 0; k < l; k++) {
       seal::Ciphertext cipher;
       encryptor.encrypt_zero_symmetric(cipher);
+      // Put some code inside this function for cleaner code and better unit testing.
+      encrypt_plain_to_gsw_one_row(plaintext, cipher, poly_id, k, coeff_count, coeff_modulus, gadget);
 
-      auto bits = (i * base_log2);
-      auto ct = cipher.data(poly_id);
-      for (int mod_id = 0; mod_id < coeff_mod_count; mod_id++) {
-        auto pad = (mod_id * coeff_count);
-        __uint128_t mod = coeff_modulus[mod_id].value();
-        uint64_t coef = pow2[mod_id][i];
-        auto pt = plaintext.data();
-        if (plaintext.size() == coeff_count * coeff_mod_count) {
-          pt = plaintext.data() + pad;
-        }
-        for (int j = 0; j < coeff_count; j++) {
-          ct[j + pad] =
-              static_cast<uint64_t>((ct[j + pad] + (__uint128_t(pt[j]) * coef % mod)) % mod);
-        }
-      }
+{
+#ifdef _DEBUG
+      seal::Plaintext plain(coeff_count);
+      decryptor.decrypt(cipher, plain);  // Used for debugging
+      // if (poly_id == 0) {
+      //   std::cout << "Plain BFV at poly_id = "<< poly_id;
+      //   std::cout << " and k = " << k << ": ";
+      //   std::cout << plain.to_string() << std::endl;
+      // }
+#endif
+}
 
-      seal::Plaintext pt(coeff_count);
-      decryptor.decrypt(cipher, pt);
-
+      // transform from seal::Ciphertext to GSWCiphertext
       std::vector<uint64_t> row;
       for (int i = 0; i < coeff_count * coeff_mod_count; i++) {
         row.push_back(cipher.data(0)[i]);
@@ -234,5 +224,34 @@ void GSWEval::encrypt_plain_to_gsw(std::vector<uint64_t> const &plaintext,
     }
   }
 
-  gsw_ntt_negacyclic_harvey(output);
+  // gsw_ntt_negacyclic_harvey(output); // ! this transformation to NTT is put outside of this function for better unit testing.
+}
+
+
+void GSWEval::encrypt_plain_to_gsw_one_row(
+    std::vector<uint64_t> const &plaintext, seal::Ciphertext &cipher,
+    const size_t half, const size_t level, const size_t coeff_count,
+    std::vector<seal::Modulus> const &coeff_modulus,
+    std::vector<std::vector<__uint128_t>> const &gadget) {
+
+    // If we are at the first half of the GSW, we are adding new things to the first polynomial of the given BFV ciphertext.
+    auto ct = cipher.data(half);
+    size_t coeff_mod_count = coeff_modulus.size();
+
+    // Many(2) moduli are used
+    for (int mod_id = 0; mod_id < coeff_mod_count; mod_id++) {
+      auto pad = (mod_id * coeff_count);
+      __uint128_t mod = coeff_modulus[mod_id].value();
+      uint64_t gadget_coef = gadget[mod_id][level];
+      auto pt = plaintext.data();
+      if (plaintext.size() == coeff_count * coeff_mod_count) {
+        pt = plaintext.data() + pad;
+      }
+      // Loop through plaintext coefficients
+      for (int j = 0; j < coeff_count; j++) {
+        __uint128_t val = (__uint128_t)pt[j] * gadget_coef % mod;
+        ct[j + pad] =
+            static_cast<uint64_t>((ct[j + pad] + val) % mod);
+      }
+    }
 }

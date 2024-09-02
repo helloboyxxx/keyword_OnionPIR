@@ -43,10 +43,30 @@ public:
   void query_to_gsw(std::vector<seal::Ciphertext> query, GSWCiphertext gsw_key,
                     GSWCiphertext &output);
 
+
+  // The input plaintext is a vector of all the coefficients. Assert that the size of this vector 
+  // is equal to the number of coefficients in the Plaintext, including the zero coefficients.
   void encrypt_plain_to_gsw(std::vector<uint64_t> const &plaintext,
                             seal::Encryptor const &encryptor, seal::Decryptor &decryptor,
                             GSWCiphertext &output);
 
+  /**
+   * @brief Helper function for encrypt_plain_to_gsw. This function encrypts the
+   * plaintext to a single row of the GSW ciphertext at the given "half" and the
+   * given l. half = 0 means the first half of the GSW.
+   * @param cipher The zero BFV ciphertext to be handled
+   */
+  void encrypt_plain_to_gsw_one_row(std::vector<uint64_t> const &plaintext,
+                                    seal::Ciphertext &cipher, const size_t half,
+                                    const size_t level,
+                                    const size_t coeff_count,
+                                    std::vector<seal::Modulus> const &coeff_modulus,
+                                    std::vector<std::vector<__uint128_t>> const &gadget);
+
+  /**
+   * @brief Transform the given GSWCipher text from polynomial representation to NTT representation.
+   * 
+   */
   void gsw_ntt_negacyclic_harvey(GSWCiphertext &gsw);
 
   void cyphertext_inverse_ntt(seal::Ciphertext &ct);

@@ -30,6 +30,7 @@ using namespace seal;
 // Each entry is a vector of bytes
 typedef std::vector<uint8_t> Entry;
 typedef Ciphertext PirQuery;
+typedef uint64_t Key; // key in the key-value pair. 
 
 // ================== CLASS DEFINITIONS ==================
 class PirParams {
@@ -41,12 +42,17 @@ public:
       @param num_entries - Number of entries in database
       @param entry_size - Size of each entry in bytes
       @param l - Parameter l for GSW scheme
+      @param hashed_key_width - width of the hashed key in bits. Default is 0, stands for no keyword support.
+      @param blowup_factor - blowup factor for the database used in keyword support. Default is 1.0.
       */
-  PirParams(uint64_t DBSize, uint64_t ndim, uint64_t num_entries, uint64_t entry_size, uint64_t l,
-            uint64_t l_key)
-      : DBSize_(DBSize), seal_params_(seal::EncryptionParameters(seal::scheme_type::bfv)),
-        num_entries_(num_entries), entry_size_(entry_size), l_(l) {
-    
+  PirParams(uint64_t DBSize, uint64_t ndim, uint64_t num_entries,
+            uint64_t entry_size, uint64_t l, uint64_t l_key,
+            size_t hashed_key_width = 0, float blowup_factor = 1.0)
+      : DBSize_(DBSize),
+        seal_params_(seal::EncryptionParameters(seal::scheme_type::bfv)),
+        num_entries_(num_entries), entry_size_(entry_size), l_(l),
+        hashed_key_width_(hashed_key_width), blowup_factor_(blowup_factor) {
+
     // Since all dimensions are fixed to 2 except the first one. We calculate the first dimension here.
     uint64_t first_dim = DBSize >> (ndim - 1);
     if (first_dim < 128) {
@@ -57,10 +63,9 @@ public:
     }
 
     // First dimension must be a power of 2.
-    // After experiment, when first_dim is 128, the performance is the best.
     dims_.push_back(first_dim); 
     for (int i = 1; i < ndim; i++) {
-      dims_.push_back(2); // ! CHANGED 2 is better than 4 as we can do a trick to reduce the request queries. This is different from the paper.
+      dims_.push_back(2);
     }
 
     // seal parameters requires at lest three parameters: poly_modulus_degree, coeff_modulus, plain_modulus
@@ -73,6 +78,7 @@ public:
       seal_params_.set_coeff_modulus(CoeffModulus::BFVDefault(DatabaseConstants::PolyDegree));
     }
     seal_params_.set_plain_modulus(DatabaseConstants::PlaintextMod);
+    // seal_params_.set_plain_modulus(DatabaseConstants::LargePlaintextMod);
 
     // It is possible to have multiple entries in a plaintext?
     // Plaintext definition in: seal::Plaintext (plaintext.h).
@@ -96,7 +102,6 @@ public:
       bits += modulus[i].bit_count();
     } // bits = 72
 
-    // ! uses this in the "pow". But if this base_log2_ means "$\log_2 {B}$", then pow << base_log2_ means pow * B ?
     // The number of bits for representing the largest modulus possible in the given context. See analysis folder.
     // This line rounds bits/l up to the nearest integer. 
     base_log2_ = (bits + l - 1) / l;
@@ -106,11 +111,10 @@ public:
     data_gsw.base_log2 = base_log2_;
     data_gsw.context = new seal::SEALContext(seal_params_);
 
-    // If l_key == l, then these two are exactly the same.
+    // The l used for RGSW(s) in algorithm 4.
     key_gsw.l = l_key;
     key_gsw.base_log2 = (bits + l_key - 1) / l_key;   // same calculation method 
     key_gsw.context = data_gsw.context;
-    
   }
   seal::EncryptionParameters get_seal_params() const;
   void print_values();
@@ -129,6 +133,8 @@ public:
   size_t get_entry_size() const;
   uint64_t get_l() const;
   uint64_t get_base_log2() const;
+  size_t get_hashed_key_width() const;
+  float get_blowup_factor() const;
 
 private:
   uint64_t DBSize_;            // number of plaintexts in the database
@@ -138,6 +144,15 @@ private:
   size_t num_entries_;         // Number of entries in database
   size_t entry_size_;          // Size of single entry in bytes
   seal::EncryptionParameters seal_params_;
+  size_t hashed_key_width_;
+  float blowup_factor_;
 };
 
+// ================== HELPER FUNCTIONS ==================
+
 void print_entry(Entry entry);
+
+
+
+// Given a key_id and the hashed_key_width, generate a random key using random number generator.
+std::vector<uint8_t> gen_single_key(uint64_t key_id, size_t hashed_key_width);

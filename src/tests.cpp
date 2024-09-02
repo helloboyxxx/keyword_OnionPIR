@@ -4,11 +4,37 @@
 #include "seal/util/scalingvariant.h"
 #include "server.h"
 #include "utils.h"
+#include <cassert>
 #include <iostream>
 #include <random>
 
+// "Default" Parameters for the PIR scheme
+#define DB_SZ       1 << 15     // Database size <==> Number of plaintexts in the database
+#define NUM_DIM     8           // Number of dimensions of the hypercube
+#define NUM_ENTRIES 1 << 15     // Number of entries in the database
+#define ENTRY_SZ    12000       // Size of each entry in the database
+#define GSW_L       9           // Parameter for GSW scheme. If set to 7 or lower, likely to fail.
+#define GSW_L_KEY   9           // Not sure for now
+
+
+// // Small server parameters for the PIR scheme
+// #define DB_SZ       256     // Database size <==> Number of plaintexts in the database
+// #define NUM_DIM     2           // Number of dimensions of the hypercube
+// #define NUM_ENTRIES 256     // Number of entries in the database
+// #define ENTRY_SZ    12000       // Size of each entry in the database
+// #define GSW_L       9           // Parameter for GSW scheme. If set to 7 or lower, likely to fail.
+// #define GSW_L_KEY   9           // Not sure for now
+
+
+#define EXPERIMENT_ITERATIONS 10
+
 void print_func_name(std::string func_name) {
-  std::cout << "                       "<< func_name << "                         " << std::endl;
+#ifdef _DEBUG
+  std::cout << "                    "<< func_name << "(Debug build)" << std::endl;
+#endif
+#ifdef _BENCHMARK
+  std::cout << "                    "<< func_name << "(Benchmark build)" << std::endl;
+#endif
 }
 
 void run_tests() {
@@ -20,7 +46,10 @@ void run_tests() {
   // test_external_product();
 
   test_pir();
-  // test_keyword_pir();
+  // test_keyword_pir(); // two server version
+  // test_cuckoo_keyword_pir(); // single server version
+
+  // test_plain_to_gsw();
 
   PRINT_BAR;
   DEBUG_PRINT("Tests finished");
@@ -72,7 +101,8 @@ void bfv_example() {
 // This is a BFV x GSW example
 void test_external_product() {
   print_func_name(__FUNCTION__);
-  PirParams pir_params(256, 2, 20000, 5, 15, 15);
+  // PirParams pir_params(256, 2, 20000, 5, 15, 15);
+  PirParams pir_params(DB_SZ, NUM_DIM, NUM_ENTRIES, ENTRY_SZ, GSW_L, GSW_L_KEY);
   pir_params.print_values();
   auto parms = pir_params.get_seal_params();    // This parameter is set to be: seal::scheme_type::bfv
   auto context_ = seal::SEALContext(parms);   // Then this context_ knows that it is using BFV scheme
@@ -97,17 +127,14 @@ void test_external_product() {
   // vector a is in the context of BFV scheme. 
   // 0, 1, 2, 4 are coeff_index of the term x^i, 
   // the index of the coefficient in the plaintext polynomial
-  a[0] = 123;
-  a[1] = 221;
-  a[2] = 69;
-  a[4] = 23;
+  a[0] = 1;
+  a[1] = 2;
+  a[2] = 3;
 
   DEBUG_PRINT("Vector a: " << a.to_string());
 
   // vector b is in the context of GSW scheme.
-
-  // b[0] = 1;
-  b[0] = 2;
+  // b[0] = 3;
   b[2] = 5;
   
   // print b
@@ -124,11 +151,12 @@ void test_external_product() {
             << std::endl;
   GSWCiphertext b_gsw;
   data_gsw.encrypt_plain_to_gsw(b, encryptor_, decryptor_, b_gsw);
+  data_gsw.gsw_ntt_negacyclic_harvey(b_gsw);  // transform b_gsw to NTT form
 
   debug(a_encrypted.data(0), "AENC[0]", coeff_count);
   debug(a_encrypted.data(1), "AENC[1]", coeff_count);
 
-  size_t mult_rounds = 3;
+  size_t mult_rounds = 1;
 
   for (int i = 0; i < mult_rounds; i++) {
     data_gsw.external_product(b_gsw, a_encrypted, coeff_count, a_encrypted);
@@ -139,116 +167,36 @@ void test_external_product() {
   
   // output decrypted result
   std::cout << "External product result: " << result.to_string() << std::endl;
-  // std::cout << "Result non-zero coeff count: " << result.nonzero_coeff_count() << std::endl;
   }
 }
 
-/**
- * @brief Given an entry id and the length of the entry, generate a random entry using random number generator.
- * 
- * @param id entry id
- * @param len length(size) of the entry. Each entry is a vector of bytes.
- * @return Entry 
- */
-Entry generate_entry(int id, int len) {
-  Entry entry;
-  // ? I think reserving enough space will help reduce the number of reallocations.
-  // My test shows that it improves the performance by about 40%. 17000ms -> 10000ms
-  entry.reserve(len);   
-  // rng here is a pseudo-random number generator: https://en.cppreference.com/w/cpp/numeric/random/mersenne_twister_engine
-  // According to the notes in: https://en.cppreference.com/w/cpp/numeric/random/rand, 
-  // rand() is not recommended for serious random-number generation needs. Therefore we need this mt19937.
-  // Other methods are recommended in: 
-  std::mt19937 rng(id); 
-  for (int i = 0; i < len; i++) {
-    entry.push_back(rng() % 256); // 256 is the maximum value of a byte
-  }
-
-  // sample entry print. Should look like: 
-  // 254, 109, 126, 66, 220, 98, 230, 17, 83, 106, 123,
-  /*
-  if (id == 100) {
-    DEBUG_PRINT("First 10 bytes of the " + std::to_string(id) + "th entry: ");
-    print_entry(entry);
-    DEBUG_PRINT("Entry size: " << entry.size());  
-  }
-  */
-  return entry;
-}
-
-/**
- * @brief Generate an entry with a specific id. The first 8 bytes of the entry is the id itself.
- * 
- * @param id id of the entry
- * @param len length of the entry
- * @return Entry 
- */
-Entry generate_entry_with_id(uint64_t id, int len) {
-  Entry entry;
-  entry.reserve(len);   // ? I think this will help reduce the number of reallocations.
-  std::mt19937 rng(id);
-
-  // push the entry id into the first 8 bytes of the entry
-  for (int i = 0; i < 8; i++) {
-    entry.push_back((id >> (8 * i)) % 256); // shift 8 bits to the right each time
-  }
-
-  // generate the rest of the entry using random numbers
-  for (int i = 0; i < len - 8; i++) {
-    entry.push_back(rng() % 256);
-  }
-  return entry;
-}
 
 // Testing Onion PIR scheme 
 void test_pir() {
   print_func_name(__FUNCTION__);
 
-#ifdef _DEBUG
-  std::cout << "===== Debug build =====" << std::endl;
-#endif
-#ifdef _BENCHMARK
-  std::cout << " ===== Benchmark build =====" << std::endl;
-#endif
-
-
-  const int experiment_times = 10;
+  auto server_time_sum = 0;
+  auto client_time_sum = 0;
   
   // setting parameters for PIR scheme
-  // - Database size = 2^15
-  // - Number of dimensions = 8
-  // - Number of entries = 2^15
-  // - Entry size = 12000 bytes
-  // - l = 9  (parameter for GSW scheme)
-  // - l_key = 9 (Not sure for now)
-  PirParams pir_params(1 << 15, 8, 1 << 15, 12000, 9, 9);
+  PirParams pir_params(DB_SZ, NUM_DIM, NUM_ENTRIES, ENTRY_SZ, GSW_L, GSW_L_KEY);
   pir_params.print_values();
   PirServer server(pir_params); // Initialize the server with the parameters
 
-
-  DEBUG_PRINT("Initializing server...");
+  std::cout << "Initializing server..." << std::endl;
   // Data to be stored in the database.
-  std::vector<Entry> data(pir_params.get_num_entries());
-
-  // Generate random data for each entry in the database. 
-  // The entry id will be used as the seed for the random number generator.
-  for (int i = 0; i < pir_params.get_num_entries(); i++) {
-    data[i] = generate_entry(i, pir_params.get_entry_size());
-  }
-  server.set_database(data);
-
+  std::vector<Entry> data = server.gen_data();
 
   // DEBUG_PRINT("Initializing client...");
 
   // Run the query process many times.
-  for (int i = 0; i < experiment_times; i++) {
+  for (int i = 0; i < EXPERIMENT_ITERATIONS; i++) {
     srand(time(0)); // reset the seed for the random number generator
     // Initialize the client
     PirClient client(pir_params);
     const int client_id = rand();
     DEBUG_PRINT("Client ID: " << client_id);
 
-    // 
     server.decryptor_ = client.get_decryptor();
     server.set_client_galois_key(client_id, client.create_galois_keys());
     server.set_client_gsw_key(client_id, client.generate_gsw_from_key());
@@ -268,14 +216,18 @@ void test_pir() {
     Entry entry = client.get_entry_from_plaintext(entry_index, decrypted_result[0]);
     auto c_end_time = CURR_TIME;
     
-    DEBUG_PRINT("Server Time: " << TIME_DIFF(s_start_time, s_end_time) << " ms");
-    DEBUG_PRINT("Client Time: " << TIME_DIFF(c_start_time, c_end_time) - TIME_DIFF(s_start_time, s_end_time) << " ms");
-    DEBUG_PRINT("Noise budget left: " << client.get_decryptor()->invariant_noise_budget(result[0]));
+    std::cout << "Experiment [" << i << "]\tServer time: " << TIME_DIFF(s_start_time, s_end_time) << " ms" << std::endl;
+    std::cout << "\t\tClient Time: " << TIME_DIFF(c_start_time, c_end_time) - TIME_DIFF(s_start_time, s_end_time) << " ms" << std::endl;
+    // std::cout << "Noise budget left: " << client.get_decryptor()->invariant_noise_budget(result[0]) << std::endl;
 
+    server_time_sum += TIME_DIFF(s_start_time, s_end_time);
+    client_time_sum += TIME_DIFF(c_start_time, c_end_time) - TIME_DIFF(s_start_time, s_end_time);
     if (entry == data[entry_index]) {
-      std::cout << "Success!" << std::endl;
+      // print a green success message
+      std::cout << "\033[1;32mSuccess!\033[0m" << std::endl;
     } else {
-      std::cout << "Failure!" << std::endl;
+      // print a red failure message
+      std::cout << "\033[1;31mFailure!\033[0m" << std::endl;
 
       std::cout << "Result:\t";
       print_entry(entry);
@@ -284,9 +236,13 @@ void test_pir() {
     }
     PRINT_BAR;
   }
+
+  std::cout << "Average server time: " << server_time_sum / EXPERIMENT_ITERATIONS << " ms" << std::endl;
+  std::cout << "Average client time: " << client_time_sum / EXPERIMENT_ITERATIONS << " ms" << std::endl;
 }
 
 void test_keyword_pir() {
+  print_func_name(__FUNCTION__);
   int table_size = 1 << 15;
   PirParams pir_params(table_size, 8, table_size, 12000, 9, 9);
   pir_params.print_values();
@@ -304,7 +260,7 @@ void test_keyword_pir() {
   for (int i = 0; i < num_entries; i++) {
     uint64_t keyword = rng();
     keywords.push_back(keyword);
-    data[i] = generate_entry_with_id(keyword, pir_params.get_entry_size());
+    data[i] = generate_entry_with_id(keyword, pir_params.get_entry_size(), 8);  // 8 in Zhikun's code
   }
 
   std::hash<uint64_t> hasher;
@@ -317,6 +273,7 @@ void test_keyword_pir() {
     }
     seed1 = rng();
     seed2 = rng();
+    DEBUG_PRINT("Seed1: " << seed1 << " Seed2: " << seed2);
     for (int i = 0; i < num_entries; i++) {
       uint64_t x = keywords[i];
       bool success = false;
@@ -350,11 +307,6 @@ void test_keyword_pir() {
       cuckoo2[hasher(x ^ seed2) % table_size] = data[i];
     }
   }
-
-  // for (int i = 0; i < num_entries; i++) {
-  //   cuckoo1[i].resize(pir_params.get_entry_size(), 0);
-  //   cuckoo2[i].resize(pir_params.get_entry_size(), 0);
-  // }
 
   server1.set_database(cuckoo1);
   server2.set_database(cuckoo2);
@@ -405,4 +357,111 @@ void test_keyword_pir() {
       print_entry(data[id]);
     }
   }
+}
+
+void test_cuckoo_keyword_pir() {
+  print_func_name(__FUNCTION__);
+  const int experiment_times = 1;
+
+  const float blowup_factor = 2.0;
+  const size_t DBSize_ = 1 << 16;
+  const size_t num_entries = 1 << 16;
+  PirParams pir_params(DBSize_, 9, num_entries, 12000, 9, 9, 16, blowup_factor);
+  pir_params.print_values();
+  PirServer server(pir_params);
+
+  DEBUG_PRINT("Initializing server...");
+  uint64_t keyword_seed = 123123;
+  CuckooInitData keyword_data = server.gen_keyword_data(100, keyword_seed);
+
+  if (keyword_data.inserted_data.size() == 0) {
+    DEBUG_PRINT("Failed to insert data into cuckoo table. Exiting...");
+    return;
+  }
+  // Now we do have a cuckoo table with data inserted.
+  CuckooSeeds last_seeds = keyword_data.used_seeds.back();
+  uint64_t seed1 = last_seeds.first;
+  uint64_t seed2 = last_seeds.second;
+  DEBUG_PRINT("Seed1: " << seed1 << " Seed2: " << seed2);
+  
+  DEBUG_PRINT("Initializing client...");
+  PirClient client(pir_params);
+  for (int i = 0; i < experiment_times; i++) {
+    srand(time(0));
+    const int client_id = rand();
+    DEBUG_PRINT("Client ID: " << client_id);
+
+    server.decryptor_ = client.get_decryptor();
+    server.set_client_galois_key(client_id, client.create_galois_keys());
+    server.set_client_gsw_key(client_id, client.generate_gsw_from_key());
+
+    // Generate a random keyword using keyword_seed. 
+    size_t wanted_keyword_idx = rand() % num_entries;
+    std::mt19937_64 rng(keyword_seed);
+    rng.discard(wanted_keyword_idx);
+    Key wanted_keyword = rng();
+    DEBUG_PRINT("Wanted keyword: " << wanted_keyword);
+
+    // client start generating keyword query
+    auto c_start_time = CURR_TIME;
+    std::vector<PirQuery> queries = client.generate_cuckoo_query(seed1, seed2, num_entries, wanted_keyword);
+    auto c_end_time = CURR_TIME;
+
+    // server start processing the query
+    auto s_start_time = CURR_TIME;
+    // we know that there is only two queries in the vector queries.
+    auto reply1 = server.make_query(client_id, std::move(queries[0]));
+    auto reply2 = server.make_query(client_id, std::move(queries[1]));
+    auto s_end_time = CURR_TIME;
+
+    // client start processing the reply
+    auto c2_start_time = CURR_TIME;
+    client.cuckoo_process_reply(seed1, seed2, num_entries, wanted_keyword, reply1, reply2);
+    auto c2_end_time = CURR_TIME;
+
+    DEBUG_PRINT("Server Time: " << TIME_DIFF(s_start_time, s_end_time) << " ms");
+    DEBUG_PRINT("Client Time: " << TIME_DIFF(c_start_time, c_end_time) + TIME_DIFF(c2_start_time, c2_end_time) << " ms");
+    DEBUG_PRINT("Noise budget left: " << client.get_decryptor()->invariant_noise_budget(reply1[0]));
+    DEBUG_PRINT("Noise budget left: " << client.get_decryptor()->invariant_noise_budget(reply2[0]));
+
+  }
+
+
+}
+
+
+// Understanding the process of encrypting a plain text to GSW ciphertext
+void test_plain_to_gsw() {
+  print_func_name(__FUNCTION__);
+
+  // ================== Preparing parameters ==================
+  PirParams pir_params(256, 2, 20000, 5, 15, 15);
+  auto parms = pir_params.get_seal_params();    // This parameter is set to be: seal::scheme_type::bfv
+  auto context_ = seal::SEALContext(parms);   // Then this context_ knows that it is using BFV scheme
+  auto evaluator_ = seal::Evaluator(context_);
+  auto keygen_ = seal::KeyGenerator(context_);
+  auto secret_key_ = keygen_.secret_key();
+  auto encryptor_ = seal::Encryptor(context_, secret_key_);
+  auto decryptor_ = seal::Decryptor(context_, secret_key_);
+  size_t coeff_count = parms.poly_modulus_degree();
+  uint64_t poly_degree = pir_params.get_seal_params().poly_modulus_degree();
+
+
+  // ================== Preparing the plain text ==================
+  std::vector<uint64_t> plain_vec(coeff_count);
+  plain_vec[0] = 1;
+
+  // ================== Encrypting the plain text ==================
+  GSWCiphertext gsw_key;
+
+  // Now we can encrypt the plain text to GSW ciphertext.
+  GSWCiphertext gsw_ct;
+  data_gsw.encrypt_plain_to_gsw(plain_vec, encryptor_, decryptor_, gsw_ct);
+
+  // Now, gsw_ct should contains l many BFV ciphertexts.
+
+
+
+
+
 }
