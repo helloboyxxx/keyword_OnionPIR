@@ -28,9 +28,9 @@ void run_tests() {
   // bfv_example();
   // test_external_product();
 
-  // test_pir();
+  test_pir();
   // test_keyword_pir(); // two server version
-  test_cuckoo_keyword_pir(); // single server version
+  // test_cuckoo_keyword_pir(); // single server version
 
   PRINT_BAR;
   DEBUG_PRINT("Tests finished");
