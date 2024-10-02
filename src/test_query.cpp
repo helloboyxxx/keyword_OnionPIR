@@ -1,14 +1,13 @@
 #include "test_query.h"
 #include "utils.h"
 
-
-#define DB_SZ             1 << 15
-#define NUM_DIM           8
-#define NUM_ENTRIES       1 << 15
-#define ENTRY_SZ          12000
-#define GSW_L             5
-#define GSW_L_KEY         13
-#define PLAIN_MOD_WIDTH   25
+#define DB_SZ             1 << 15       // Database size <==> Number of plaintexts in the database
+#define NUM_ENTRIES       1 << 15       // Number of entries in the database
+#define GSW_L             5             // Parameter for GSW scheme. 
+#define GSW_L_KEY         15            // GSW for query expansion
+#define FST_DIM_SZ        256           // Number of dimensions of the hypercube
+#define PT_MOD_WIDTH      25            // Width of the plain modulus 
+#define CT_MOD_WIDTH      {62, 62, 62}  // Coeff modulus for the BFV scheme
 
 
 #define EXPERIMENT_ITER 1
@@ -40,7 +39,8 @@ void PirTest::gen_and_expand() {
   DEBUG_PRINT("Running: " << __FUNCTION__);
 
   // ======================== Initialize the client and server
-  PirParams pir_params{DB_SZ, NUM_DIM, NUM_ENTRIES, ENTRY_SZ, GSW_L, GSW_L_KEY, PLAIN_MOD_WIDTH};
+  PirParams pir_params(DB_SZ, FST_DIM_SZ, NUM_ENTRIES, GSW_L,
+                       GSW_L_KEY, PT_MOD_WIDTH, CT_MOD_WIDTH);
   pir_params.print_values();
   PirClient client(pir_params);
   srand(time(0));
@@ -91,7 +91,8 @@ void PirTest::enc_then_add() {
   DEBUG_PRINT("Running: " << __FUNCTION__);
 
   // ======================== Initialize the client and server
-  PirParams pir_params{DB_SZ, NUM_DIM, NUM_ENTRIES, ENTRY_SZ, GSW_L, GSW_L_KEY, PLAIN_MOD_WIDTH};
+  PirParams pir_params(DB_SZ, FST_DIM_SZ, NUM_ENTRIES, GSW_L,
+                       GSW_L_KEY, PT_MOD_WIDTH, CT_MOD_WIDTH);
   PirClient client(pir_params);
 
   // ======================== we try a simpler version of the client generate_query

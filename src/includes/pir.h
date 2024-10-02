@@ -1,6 +1,7 @@
 #pragma once
 
 #include "seal/seal.h"
+#include "database_constants.h"
 #include <vector>
 
 // ================== MACROs ==================
@@ -37,15 +38,14 @@ public:
   @param DBSize - Number of plaintexts in database
   @param first_dim_sz - Size of the first dimension of the database
   @param num_entries - Number of entries that will be stored in the database
-  @param entry_size - Size of each entry in bytes
   @param l - Parameter l for GSW scheme
   @param hashed_key_width - width of the hashed key in bits. Default is 0, stands for no keyword support.
   @param blowup_factor - blowup factor for the database used in keyword support. Default is 1.0.
   */
   PirParams(const uint64_t DBSize, const uint64_t first_dim_sz,
-            const uint64_t num_entries, const uint64_t entry_size,
-            const uint64_t l, const uint64_t key_l,
-            const size_t plain_mod_width, const size_t hashed_key_width = 0,
+            const uint64_t num_entries,
+            const uint64_t l, const uint64_t l_key,
+            const size_t plain_mod_width, const std::vector<int> ct_mod_width, const size_t hashed_key_width = 0,
             const float blowup_factor = 1.0);
 
 
@@ -68,7 +68,7 @@ public:
   size_t get_entry_size() const;
   std::vector<uint64_t> get_dims() const;
   uint64_t get_l() const;
-  uint64_t get_key_l() const;
+  uint64_t get_l_key() const;
   uint64_t get_base_log2() const;
   size_t get_hashed_key_width() const;
   float get_blowup_factor() const;
@@ -79,7 +79,7 @@ public:
 private:
   uint64_t DBSize_;            // number of plaintexts in the database
   uint64_t l_;                 // l for RGSW
-  uint64_t key_l_;             // l for key RGSW
+  uint64_t l_key_;             // l for key RGSW
   uint64_t base_log2_;         // log of base for RGSW
   std::vector<uint64_t> dims_; // Number of dimensions
   size_t num_entries_;         // Number of entries in database
