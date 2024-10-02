@@ -1,6 +1,6 @@
 #include "utils.h"
-#include <iomanip>
 #include <fstream>
+#include <stdexcept>
 
 void utils::negacyclic_shift_poly_coeffmod(seal::util::ConstCoeffIter poly, size_t coeff_count,
                                            size_t shift, const seal::Modulus &modulus,
@@ -90,21 +90,49 @@ std::vector<std::vector<__uint128_t>> gsw_gadget(size_t l, uint64_t base_log2, s
 }
 
 
-
+/**
+ * @brief Generate the smallest prime that is at least bit_width bits long.
+ * Optimized for repeated calls with the same bit_width by caching results in a file.
+ * @param bit_width >= 2 and <= 64
+ * @return std::uint64_t  
+ */
 std::uint64_t generate_prime(size_t bit_width) {
-
   if (bit_width < 2) throw std::invalid_argument("Bit width must be at least 2.");
-  
-  std::random_device rd;
-  std::mt19937_64 gen(rd());
-  std::uniform_int_distribution<std::uint64_t> dis(1ULL << (bit_width - 1), (1ULL << bit_width) - 1);
-  
-  std::uint64_t candidate;
+
+  // ================= Read from file if it exists
+  std::ifstream file("prime_cache.csv");
+  if (file.is_open()) {
+    std::string line;
+    while (std::getline(file, line)) {
+      std::stringstream ss(line);
+      std::string token;
+      std::getline(ss, token, ',');
+      size_t cached_bit_width = std::stoul(token);
+      if (cached_bit_width == bit_width) {
+        std::getline(ss, token, ',');
+        return std::stoull(token);
+      }
+    }
+    file.close();
+  }
+
+  // Otherwise, generate a new prime
+  std::uint64_t candidate = 1ULL << (bit_width - 1);
   do {
-      candidate = dis(gen);
+      candidate++;
       // Ensure candidate is odd, as even numbers greater than 2 cannot be prime
       candidate |= 1;
   } while (!seal::util::is_prime(seal::Modulus(candidate)));
+
+  // write the bit_width, candidate pair to csv file
+  std::string file_name = "prime_cache.csv";
+  std::ofstream out_file(file_name, std::ios::app);
+  if (file.is_open()) {
+    out_file << bit_width << "," << candidate << std::endl;
+    out_file.close();
+  } else {
+    std::cerr << "Failed to create file " << file_name << std::endl;
+  }
   
   return candidate;
 }

@@ -1,6 +1,16 @@
 #include "test_query.h"
 #include "utils.h"
 
+
+#define DB_SZ             1 << 15
+#define NUM_DIM           8
+#define NUM_ENTRIES       1 << 15
+#define ENTRY_SZ          12000
+#define GSW_L             5
+#define GSW_L_KEY         13
+#define PLAIN_MOD_WIDTH   25
+
+
 #define EXPERIMENT_ITER 1
 
 const size_t entry_idx = 1; // fixed index for testing
@@ -30,7 +40,7 @@ void PirTest::gen_and_expand() {
   DEBUG_PRINT("Running: " << __FUNCTION__);
 
   // ======================== Initialize the client and server
-  PirParams pir_params{DB_SZ, NUM_DIM, NUM_ENTRIES, ENTRY_SZ, GSW_L, GSW_L_KEY};
+  PirParams pir_params{DB_SZ, NUM_DIM, NUM_ENTRIES, ENTRY_SZ, GSW_L, GSW_L_KEY, PLAIN_MOD_WIDTH};
   pir_params.print_values();
   PirClient client(pir_params);
   srand(time(0));
@@ -81,7 +91,7 @@ void PirTest::enc_then_add() {
   DEBUG_PRINT("Running: " << __FUNCTION__);
 
   // ======================== Initialize the client and server
-  PirParams pir_params{DB_SZ, NUM_DIM, NUM_ENTRIES, ENTRY_SZ, GSW_L, GSW_L_KEY};
+  PirParams pir_params{DB_SZ, NUM_DIM, NUM_ENTRIES, ENTRY_SZ, GSW_L, GSW_L_KEY, PLAIN_MOD_WIDTH};
   PirClient client(pir_params);
 
   // ======================== we try a simpler version of the client generate_query

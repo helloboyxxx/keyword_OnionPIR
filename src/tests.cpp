@@ -1,20 +1,22 @@
 #include "tests.h"
+#include "database_constants.h"
 #include "external_prod.h"
 #include "pir.h"
 #include "server.h"
 #include "utils.h"
 #include <cassert>
-#include <iostream>
 #include <fstream>
+#include <iostream>
 #include <random>
 
 // "Default" Parameters for the PIR scheme
-#define DB_SZ       1 << 15     // Database size <==> Number of plaintexts in the database
-#define NUM_DIM     8           // Number of dimensions of the hypercube
-#define NUM_ENTRIES 1 << 15     // Number of entries in the database
-#define ENTRY_SZ    12000       // Size of each entry in the database
-#define GSW_L       5           // Parameter for GSW scheme. 
-#define GSW_L_KEY   13          // GSW for query expansion
+#define DB_SZ             1 << 15     // Database size <==> Number of plaintexts in the database
+#define NUM_ENTRIES       1 << 15     // Number of entries in the database
+#define ENTRY_SZ          12000       // Size of each entry in the database
+#define GSW_L             5           // Parameter for GSW scheme. 
+#define GSW_L_KEY         15          // GSW for query expansion
+#define FST_DIM_SZ        256         // Number of dimensions of the hypercube
+#define PLAIN_MOD_WIDTH   25          // Width of the plain modulus 
 
 
 #define EXPERIMENT_ITERATIONS 10
@@ -54,7 +56,7 @@ void run_tests() {
 void bfv_example() {
   print_func_name(__FUNCTION__);
 
-  PirParams pir_params(256, 2, 20000, 5, 5, 5);
+  PirParams pir_params(256, 2, 20000, 5, 5, 5, PLAIN_MOD_WIDTH);
   auto context_ = seal::SEALContext(pir_params.get_seal_params());
   auto evaluator_ = seal::Evaluator(context_);
   auto keygen_ = seal::KeyGenerator(context_);
@@ -95,7 +97,7 @@ void bfv_example() {
 void test_external_product() {
   print_func_name(__FUNCTION__);
   // PirParams pir_params(256, 2, 20000, 5, 15, 15);
-  PirParams pir_params(DB_SZ, NUM_DIM, NUM_ENTRIES, ENTRY_SZ, GSW_L, GSW_L_KEY);
+  PirParams pir_params(DB_SZ, FST_DIM_SZ, NUM_ENTRIES, ENTRY_SZ, GSW_L, GSW_L_KEY, PLAIN_MOD_WIDTH);
   pir_params.print_values();
   auto parms = pir_params.get_seal_params();    // This parameter is set to be: seal::scheme_type::bfv
   auto context_ = seal::SEALContext(parms);   // Then this context_ knows that it is using BFV scheme
@@ -170,7 +172,8 @@ void test_pir() {
   
   // setting parameters for PIR scheme
   size_t entry_size = (seal::Modulus(DatabaseConstants::PlaintextMod).bit_count() - 1) * DatabaseConstants::PolyDegree / 8;
-  PirParams pir_params(DB_SZ, NUM_DIM, NUM_ENTRIES, entry_size, GSW_L, GSW_L_KEY);
+  PirParams pir_params(DB_SZ, FST_DIM_SZ, NUM_ENTRIES, entry_size, GSW_L,
+                       GSW_L_KEY, PLAIN_MOD_WIDTH);
   pir_params.print_values();
   PirServer server(pir_params); // Initialize the server with the parameters
 
@@ -235,7 +238,7 @@ void test_pir() {
 void test_keyword_pir() {
   print_func_name(__FUNCTION__);
   int table_size = 1 << 15;
-  PirParams pir_params(table_size, 8, table_size, 12000, 9, 9);
+  PirParams pir_params(table_size, 8, table_size, 12000, 9, 9, PLAIN_MOD_WIDTH);
   pir_params.print_values();
   const int client_id = 0;
   PirServer server1(pir_params), server2(pir_params);
@@ -426,7 +429,7 @@ void test_plain_to_gsw() {
   print_func_name(__FUNCTION__);
 
   // ================== Preparing parameters ==================
-  PirParams pir_params(256, 2, 20000, 5, 15, 15);
+  PirParams pir_params(256, 2, 20000, 5, 15, 15, PLAIN_MOD_WIDTH);
   auto parms = pir_params.get_seal_params();    // This parameter is set to be: seal::scheme_type::bfv
   auto context_ = seal::SEALContext(parms);   // Then this context_ knows that it is using BFV scheme
   auto evaluator_ = seal::Evaluator(context_);
@@ -478,7 +481,7 @@ void find_best_params() {
       size_t entry_size = (bit_width - 1) * DatabaseConstants::PolyDegree / 8;
 
       // setting parameters for PIR scheme
-      PirParams pir_params(DB_SZ, NUM_DIM, NUM_ENTRIES, 12000, curr_l,
+      PirParams pir_params(DB_SZ, FST_DIM_SZ, NUM_ENTRIES, 12000, curr_l,
                           curr_l, curr_plain_mod);
       pir_params.print_values();
       PirServer server(pir_params); // Initialize the server with the parameters

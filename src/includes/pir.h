@@ -1,8 +1,6 @@
 #pragma once
 
-#include "database_constants.h"
-#include "external_prod.h"
-#include <stdexcept>
+#include "seal/seal.h"
 #include <vector>
 
 // ================== MACROs ==================
@@ -35,116 +33,54 @@ typedef uint64_t Key; // key in the key-value pair.
 class PirParams {
 public:
   /*!
-      PirParams constructor.
-      @param DBSize - Number of plaintexts in database
-      @param ndim - Number of database dimensions
-      @param num_entries - Number of entries in database
-      @param entry_size - Size of each entry in bytes
-      @param l - Parameter l for GSW scheme
-      @param hashed_key_width - width of the hashed key in bits. Default is 0, stands for no keyword support.
-      @param blowup_factor - blowup factor for the database used in keyword support. Default is 1.0.
-      */
-  PirParams(uint64_t DBSize, uint64_t ndim, uint64_t num_entries,
-            uint64_t entry_size, uint64_t l, uint64_t l_key,
-            size_t plain_mod = DatabaseConstants::PlaintextMod, size_t hashed_key_width = 0,
-            float blowup_factor = 1.0)
-      : DBSize_(DBSize),
-        seal_params_(seal::EncryptionParameters(seal::scheme_type::bfv)),
-        num_entries_(num_entries), entry_size_(entry_size), l_(l),
-        hashed_key_width_(hashed_key_width), blowup_factor_(blowup_factor) {
-
-    // Since all dimensions are fixed to 2 except the first one. We calculate the first dimension here.
-    uint64_t first_dim = DBSize >> (ndim - 1);
-    if (first_dim < 128) {
-      throw std::invalid_argument("Size of first dimension is too small");
-    }
-    if ((first_dim & (first_dim - 1))) {
-      throw std::invalid_argument("Size of database is not a power of 2");
-    }
-
-    // First dimension must be a power of 2.
-    dims_.push_back(first_dim); 
-    for (int i = 1; i < ndim; i++) {
-      dims_.push_back(2);
-    }
-
-    // seal parameters requires at lest three parameters: poly_modulus_degree, coeff_modulus, plain_modulus
-    // Then the seal context will be set properly for encryption and decryption.
-    seal_params_.set_poly_modulus_degree(DatabaseConstants::PolyDegree); // example: a_1 x^4095 + a_2 x^4094 + ... + a_4096 x^0
-    if (DatabaseConstants::PolyDegree == 8192) {
-      seal_params_.set_coeff_modulus(
-          CoeffModulus::Create(DatabaseConstants::PolyDegree, {60, 60, 60}));
-    } else {
-      seal_params_.set_coeff_modulus(CoeffModulus::BFVDefault(DatabaseConstants::PolyDegree));
-      // seal_params_.set_coeff_modulus(
-      //     CoeffModulus::Create(DatabaseConstants::PolyDegree, {32, 32, 33}));
-    }
-    // seal_params_.set_plain_modulus(DatabaseConstants::PlaintextMod);
-    seal_params_.set_plain_modulus(plain_mod);
-
-    if (get_num_entries_per_plaintext() == 0) {
-      std::cerr << "Entry size: " << entry_size << std::endl;
-      std::cerr << "Poly degree: " << DatabaseConstants::PolyDegree << std::endl;
-      std::cerr << "bits per coeff: " << get_num_bits_per_coeff() << std::endl;
-      throw std::invalid_argument("Number of entries per plaintext is 0, possibly due to too large entry size");
-    }
-
-    // The first part (mult) calculates the number of entries that this database can hold in total. (limits)
-    // num_entries is the number of useful entries that the user can use in the database.
-    if (DBSize_ * get_num_entries_per_plaintext() < num_entries) {
-      std::cerr << "DBSize_ = " << DBSize_ << std::endl;
-      std::cerr << "get_num_entries_per_plaintext() = " << get_num_entries_per_plaintext() << std::endl;
-      std::cerr << "num_entries = " << num_entries << std::endl;
-      throw std::invalid_argument("Number of entries in database is too large");
-    }
+  PirParams constructor.
+  @param DBSize - Number of plaintexts in database
+  @param first_dim_sz - Size of the first dimension of the database
+  @param num_entries - Number of entries that will be stored in the database
+  @param entry_size - Size of each entry in bytes
+  @param l - Parameter l for GSW scheme
+  @param hashed_key_width - width of the hashed key in bits. Default is 0, stands for no keyword support.
+  @param blowup_factor - blowup factor for the database used in keyword support. Default is 1.0.
+  */
+  PirParams(const uint64_t DBSize, const uint64_t first_dim_sz,
+            const uint64_t num_entries, const uint64_t entry_size,
+            const uint64_t l, const uint64_t key_l,
+            const size_t plain_mod_width, const size_t hashed_key_width = 0,
+            const float blowup_factor = 1.0);
 
 
-    // This for-loop calculates the sum of bits in the first_context_data().parms().coeff_modulus().
-    // In our case, we have 36 + 36 = 72 bits. This is used for calculating the number of bits required for the base (B) in RGSW.
-    auto modulus = seal_params_.coeff_modulus();
-    int bits = 0;
-    for (int i = 0; i < modulus.size() - 1; i++) {
-      bits += modulus[i].bit_count();
-    } // bits = 72
-
-    // The number of bits for representing the largest modulus possible in the given context. See analysis folder.
-    // This line rounds bits/l up to the nearest integer. 
-    base_log2_ = (bits + l - 1) / l;
-
-    // Set up parameters for GSW in external_prod.h
-    data_gsw.l = l;
-    data_gsw.base_log2 = base_log2_;
-    data_gsw.context = new seal::SEALContext(seal_params_);
-
-    // The l used for RGSW(s) in algorithm 4.
-    key_gsw.l = l_key;
-    key_gsw.base_log2 = (bits + l_key - 1) / l_key;   // same calculation method 
-    key_gsw.context = data_gsw.context;
-  }
-  seal::EncryptionParameters get_seal_params() const;
-  void print_values();
-  uint64_t get_DBSize() const;
-  std::vector<uint64_t> get_dims() const;
-  // Calculates the number of entries that each plaintext can contain, aligning
-  // the end of an entry to the end of a plaintext.
+  // ================== getters ==================
+  /**
+    * @brief Calculates the number of entries that each plaintext can contain,
+    aligning the end of an entry to the end of a plaintext.
+   */
   size_t get_num_entries_per_plaintext() const;
-  // ? What is the "coeff" here? Why it is possible to have multiple bits in a coeff?
-  // ?  For me it seems that this is the number of bits required to represent a single coefficient of the polynomial corresponds to the plaintext.
   size_t get_num_bits_per_coeff() const;
-  // Calculates the number of bytes of data each plaintext contains, after
-  // aligning the end of an entry to the end of a plaintext.
+
+  /**
+   * @brief Calculates the number of bytes of data each plaintext contains,
+   * after aligning the end of an entry to the end of a plaintext.
+   */
   size_t get_num_bits_per_plaintext() const;
+  seal::EncryptionParameters get_seal_params() const;
+  uint64_t get_DBSize() const;
   size_t get_num_entries() const;
   size_t get_entry_size() const;
+  std::vector<uint64_t> get_dims() const;
   uint64_t get_l() const;
+  uint64_t get_key_l() const;
   uint64_t get_base_log2() const;
   size_t get_hashed_key_width() const;
   float get_blowup_factor() const;
 
+
+  void print_values() const;
+
 private:
   uint64_t DBSize_;            // number of plaintexts in the database
-  uint64_t l_;                 // l for GSW
-  uint64_t base_log2_;         // log of base for GSW
+  uint64_t l_;                 // l for RGSW
+  uint64_t key_l_;             // l for key RGSW
+  uint64_t base_log2_;         // log of base for RGSW
   std::vector<uint64_t> dims_; // Number of dimensions
   size_t num_entries_;         // Number of entries in database
   size_t entry_size_;          // Size of single entry in bytes
@@ -156,7 +92,6 @@ private:
 // ================== HELPER FUNCTIONS ==================
 
 void print_entry(Entry entry);
-
 
 
 // Given a key_id and the hashed_key_width, generate a random key using random number generator.

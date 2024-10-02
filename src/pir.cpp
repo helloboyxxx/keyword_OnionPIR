@@ -1,63 +1,104 @@
 #include "pir.h"
+#include "database_constants.h"
+#include "external_prod.h"
+#include "utils.h"
 
 #include <cassert>
 
-seal::EncryptionParameters PirParams::get_seal_params() const { return seal_params_; }
+PirParams::PirParams(const uint64_t DBSize, const uint64_t first_dim_sz,
+                     const uint64_t num_entries, const uint64_t entry_size,
+                     const uint64_t l, const uint64_t key_l,
+                     const size_t plain_mod_width,
+                     const size_t hashed_key_width, const float blowup_factor)
+    : DBSize_(DBSize),
+      seal_params_(seal::EncryptionParameters(seal::scheme_type::bfv)),
+      num_entries_(num_entries), entry_size_(entry_size), l_(l), key_l_(key_l),
+      hashed_key_width_(hashed_key_width), blowup_factor_(blowup_factor) {
 
-uint64_t PirParams::get_DBSize() const { return DBSize_; }
-
-std::vector<uint64_t> PirParams::get_dims() const { return dims_; }
-
-uint64_t PirParams::get_l() const { return l_; }
-
-uint64_t PirParams::get_base_log2() const { return base_log2_; }
-
-void PirParams::print_values() {
-  std::cout << "==============================================================" << std::endl;
-  std::cout << "                       PIR PARAMETERS                         " << std::endl;
-  std::cout << "==============================================================" << std::endl;
-  std::cout << "  num_entries_                        = " << num_entries_ << std::endl;
-  std::cout << "  l_                                   = " << l_ << std::endl;
-  std::cout << "  base_log2_                           = " << base_log2_ << std::endl;
-  std::cout << "  entry_size_                          = " << entry_size_ << std::endl;
-  std::cout << "  DBSize_ (num plaintexts in database) = " << DBSize_ << std::endl;
-  std::cout << "  DBCapacity (max num of entries)      = "
-            << DBSize_ * get_num_entries_per_plaintext() << std::endl;
-  std::cout << "  dimensions_                          = [ ";
-
-  for (const auto &dim : dims_) {
-    std::cout << dim << " ";
+  // Since all dimensions are fixed to 2 except the first one. We calculate the
+  // number of dimensions here.
+  const uint64_t ndim = 1 + log2((DBSize / first_dim_sz));
+  if (first_dim_sz < 128) {
+    throw std::invalid_argument("Size of first dimension is too small");
+  }
+  // make sure if the first dimension is a power of 2.
+  if ((first_dim_sz & (first_dim_sz - 1))) {
+    throw std::invalid_argument("Size of database is not a power of 2");
   }
 
-  std::cout << "]" << std::endl;
-  std::cout << "  seal_params_.poly_modulus_degree()       = " << seal_params_.poly_modulus_degree()
-            << std::endl;
-
-  auto coeff_modulus_size = seal_params_.coeff_modulus().size();
-  std::cout << "  seal_params_.coeff_modulus().bit_count   = [";
-
-  for (std::size_t i = 0; i < coeff_modulus_size - 1; i++) {
-    std::cout << seal_params_.coeff_modulus()[i].bit_count() << " + ";
+  // First dimension must be a power of 2.
+  dims_.push_back(first_dim_sz);
+  for (int i = 1; i < ndim; i++) {
+    dims_.push_back(2);
   }
 
-  std::cout << seal_params_.coeff_modulus().back().bit_count();
-  std::cout << "] bits" << std::endl;
-  std::cout << "  seal_params_.coeff_modulus().size()      = "
-            << seal_params_.coeff_modulus().size() << std::endl;
-  std::cout << "  seal_params_.plain_modulus().bitcount()  = "
-            << seal_params_.plain_modulus().bit_count() << std::endl;
+  // seal parameters requires at lest three parameters: poly_modulus_degree,
+  // coeff_modulus, plain_modulus Then the seal context will be set properly for
+  // encryption and decryption.
+  seal_params_.set_poly_modulus_degree(
+      DatabaseConstants::PolyDegree); // example: a_1 x^4095 + a_2 x^4094 + ...
+                                      // + a_4096 x^0
+  if (DatabaseConstants::PolyDegree == 8192) {
+    seal_params_.set_coeff_modulus(
+        CoeffModulus::Create(DatabaseConstants::PolyDegree, {60, 60, 60}));
+  } else {
+    seal_params_.set_coeff_modulus(
+        CoeffModulus::BFVDefault(DatabaseConstants::PolyDegree));
+    // seal_params_.set_coeff_modulus(
+    //     CoeffModulus::Create(DatabaseConstants::PolyDegree, {32, 32, 33}));
+  }
+  auto plain_mod = generate_prime(plain_mod_width);
+  seal_params_.set_plain_modulus(plain_mod);
 
-  std::cout << "==============================================================" << std::endl;
+  if (get_num_entries_per_plaintext() == 0) {
+    std::cerr << "Entry size: " << entry_size << std::endl;
+    std::cerr << "Poly degree: " << DatabaseConstants::PolyDegree << std::endl;
+    std::cerr << "bits per coeff: " << get_num_bits_per_coeff() << std::endl;
+    throw std::invalid_argument("Number of entries per plaintext is 0, "
+                                "possibly due to too large entry size");
+  }
+
+  // The first part (mult) calculates the number of entries that this database
+  // can hold in total. (limits) num_entries is the number of useful entries
+  // that the user can use in the database.
+  if (DBSize_ * get_num_entries_per_plaintext() < num_entries) {
+    std::cerr << "DBSize_ = " << DBSize_ << std::endl;
+    std::cerr << "get_num_entries_per_plaintext() = "
+              << get_num_entries_per_plaintext() << std::endl;
+    std::cerr << "num_entries = " << num_entries << std::endl;
+    throw std::invalid_argument("Number of entries in database is too large");
+  }
+
+  // This for-loop calculates the sum of bits in the
+  // first_context_data().parms().coeff_modulus(). In our case, we have 36 + 36
+  // = 72 bits. This is used for calculating the number of bits required for the
+  // base (B) in RGSW.
+  auto modulus = seal_params_.coeff_modulus();
+  int bits = 0;
+  for (int i = 0; i < modulus.size() - 1; i++) {
+    bits += modulus[i].bit_count();
+  } // bits = 72
+
+  // The number of bits for representing the largest modulus possible in the
+  // given context. See analysis folder. This line rounds bits/l up to the
+  // nearest integer.
+  base_log2_ = (bits + l - 1) / l;
+
+  // Set up parameters for GSW in external_prod.h
+  data_gsw.l = l;
+  data_gsw.base_log2 = base_log2_;
+  data_gsw.context = new seal::SEALContext(seal_params_);
+
+  // The l used for RGSW(s) in algorithm 4.
+  key_gsw.l = key_l;
+  key_gsw.base_log2 = (bits + key_l - 1) / key_l; // same calculation method
+  key_gsw.context = data_gsw.context;
 }
 
 size_t PirParams::get_num_entries_per_plaintext() const {
   size_t total_bits = get_num_bits_per_plaintext();
   return total_bits / (entry_size_ * 8);
 }
-
-size_t PirParams::get_entry_size() const { return entry_size_; }
-
-size_t PirParams::get_num_entries() const { return num_entries_; }
 
 size_t PirParams::get_num_bits_per_coeff() const {
   return seal_params_.plain_modulus().bit_count() - 1;
@@ -67,9 +108,19 @@ size_t PirParams::get_num_bits_per_plaintext() const {
   return get_num_bits_per_coeff() * seal_params_.poly_modulus_degree();
 }
 
+seal::EncryptionParameters PirParams::get_seal_params() const { return seal_params_; }
+uint64_t PirParams::get_DBSize() const { return DBSize_; }
+size_t PirParams::get_entry_size() const { return entry_size_; }
+size_t PirParams::get_num_entries() const { return num_entries_; }
+std::vector<uint64_t> PirParams::get_dims() const { return dims_; }
+uint64_t PirParams::get_l() const { return l_; }
+uint64_t PirParams::get_key_l() const { return key_l_; }
+uint64_t PirParams::get_base_log2() const { return base_log2_; }
 size_t PirParams::get_hashed_key_width() const { return hashed_key_width_; }
-
 float PirParams::get_blowup_factor() const { return blowup_factor_; }
+
+
+// ================== HELPER FUNCTIONS ==================
 
 void print_entry(Entry entry) {
   int cnt = 0;
@@ -93,4 +144,39 @@ Entry gen_single_key(uint64_t key_id, size_t hashed_key_width) {
     hashed_key.push_back(rng() % 256);
   }
   return hashed_key;
+}
+
+void PirParams::print_values() const {
+  std::cout << "==============================================================" << std::endl;
+  std::cout << "                       PIR PARAMETERS                         " << std::endl;
+  std::cout << "==============================================================" << std::endl;
+  std::cout << "  DBSize_ (num plaintexts) \t\t\t= " << DBSize_ << std::endl;
+  std::cout << "  Num entries per plaintext\t\t\t= "
+            << get_num_entries_per_plaintext() << std::endl;
+  std::cout << "  num_entries_(actually stored)\t\t\t= " << num_entries_ << std::endl;
+  std::cout << "  entry_size_\t\t\t\t\t= " << entry_size_ << std::endl;
+  std::cout << "  l_\t\t\t\t\t\t= " << l_ << std::endl;
+  std::cout << "  key_l_\t\t\t\t\t= " << key_l_ << std::endl;
+  std::cout << "  base_log2_\t\t\t\t\t= " << base_log2_ << std::endl;
+  std::cout << "  dimensions_\t\t\t\t\t= [ ";
+  for (const auto &dim : dims_) {
+    std::cout << dim << " ";
+  }
+  std::cout << "]" << std::endl;
+  std::cout << "  seal_params_.poly_modulus_degree()\t\t= "
+            << seal_params_.poly_modulus_degree() << std::endl;
+
+  auto coeff_modulus_size = seal_params_.coeff_modulus().size();
+  std::cout << "  seal_params_.coeff_modulus().bit_count\t= [";
+
+  for (std::size_t i = 0; i < coeff_modulus_size - 1; i++) {
+    std::cout << seal_params_.coeff_modulus()[i].bit_count() << " + ";
+  }
+
+  std::cout << seal_params_.coeff_modulus().back().bit_count();
+  std::cout << "] bits" << std::endl;
+  std::cout << "  seal_params_.plain_modulus().bitcount()\t= "
+            << seal_params_.plain_modulus().bit_count() << std::endl;
+
+  std::cout << "==============================================================" << std::endl;
 }
