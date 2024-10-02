@@ -37,13 +37,13 @@ Fancy! And it exsists!
 
 #### Learning With Error (LWE)
 
-Given a random vector $a \in \mathbb{Z}_q^n$, a secret key $s \in \mathbb{B}^n, \mathbb{B} = \set{0, 1}$, a small plaintext message $m$, and a small noise $e$:
+Given a random vector $a \in \mathbb{Z}_q^n$, a secret key $s \in \mathbb{B}^n, \mathbb{B} = \set{0, 1}$, a small plaintext message $m \in \mathbb{Z}_t$, and a small noise $e$:
 $$
 \text{LWE}(m) = (a, a \cdot s + m + e)
 $$
 $n$ decides the security level we want. The decryption is also straight forward in high-level: 
 $$
-\text{Dec}(\;(a, b)\;) = \lfloor b - a \cdot s \rceil
+\text{Dec}(\;(a, b)\;) = \lfloor b - a \cdot s \rceil = \lfloor m + e\rceil = m
 $$
 
 
@@ -197,7 +197,7 @@ A \boxdot b &= \pmb{u} \cdot A = \pmb{u} \cdot (Z_A + \mu_A \cdot G)\\
 \end{align*}
 $$
 
-Recall, decryption is to calculate the linear equation $\text{Dec}(\;(a, b)\;) = b - a \cdot s$. Then, taking the expectation, everything goes to zero except $\mu_A \cdot \mu_b$. 
+Recall, decryption is to calculate the linear equation $\phi(a, b) = b - a \cdot s$. Then, taking the expectation, everything goes to zero except $\mu_A \cdot \mu_b$. 
 
 
 
@@ -213,9 +213,11 @@ $$
 
 \end{align*}
 $$
-If we have small message $\mu_A$, then this multiplication is roughly free! Ok, but why? I must quote this sentence I learnt from Jeremy Kun: "This is useful when the noise growth is asymmetric in the two arguments, and so basically you make the noise-heavy part as small as possible and move the powers of 2 to the other side."
+If we have small message $\mu_A$, then this multiplication is roughly free! In OnionPIR, we only use RGSW(0) or RGSW(1), so $|\mu_A| \leq 1$.  yay!
 
-Then the essence is that we separate RLWE, which is very sensitive to scaling, to smaller parts, and then perform this "bit-by-bit" multiplication. We can do this because we have carefully designed this RGSW scheme so that it stores enough information for all powers of $B$, saving this scaling for RLWE.
+Ok, but why exactly we don't have multiplicative error growth? Look at the second row, where $\pmb{u} \cdot G$ happened. This $\pmb{u}$ is the decomposition of $b$. The whole RLWE ciphertext is decomposed into smaller representation, so is the noise. Multiplying the decomposed value by the gadget recovers the noise for each part, then we do addition. 
+
+Let me quote this sentence I learnt from Jeremy Kun: "This[gadget decomposition] is useful when the noise growth is asymmetric in the two arguments, and so basically you make the noise-heavy part as small as possible and move the powers of 2 to the other side." So, the essence is that we separate RLWE, which is very sensitive to scaling, to smaller parts, and then perform this "bit-by-bit" multiplication. We can do this because we have carefully designed this RGSW scheme so that it stores enough information for all powers of $B$, saving this scaling for RLWE.
 
 
 

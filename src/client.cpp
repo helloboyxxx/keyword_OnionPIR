@@ -1,10 +1,7 @@
 #include "client.h"
 #include "external_prod.h"
 #include "pir.h"
-#include "seal/util/defines.h"
-#include "seal/util/scalingvariant.h"
 #include "utils.h"
-#include <bitset>
 
 
 PirClient::PirClient(const PirParams &pir_params)

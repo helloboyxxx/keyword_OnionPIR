@@ -1,5 +1,4 @@
 #include "external_prod.h"
-#include "seal/util/polyarithsmallmod.h"
 #include "utils.h"
 #include <cassert>
 

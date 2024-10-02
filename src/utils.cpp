@@ -1,5 +1,6 @@
 #include "utils.h"
 #include <iomanip>
+#include <fstream>
 
 void utils::negacyclic_shift_poly_coeffmod(seal::util::ConstCoeffIter poly, size_t coeff_count,
                                            size_t shift, const seal::Modulus &modulus,
@@ -86,4 +87,24 @@ std::vector<std::vector<__uint128_t>> gsw_gadget(size_t l, uint64_t base_log2, s
 // #endif
 
   return gadget;
+}
+
+
+
+std::uint64_t generate_prime(size_t bit_width) {
+
+  if (bit_width < 2) throw std::invalid_argument("Bit width must be at least 2.");
+  
+  std::random_device rd;
+  std::mt19937_64 gen(rd());
+  std::uniform_int_distribution<std::uint64_t> dis(1ULL << (bit_width - 1), (1ULL << bit_width) - 1);
+  
+  std::uint64_t candidate;
+  do {
+      candidate = dis(gen);
+      // Ensure candidate is odd, as even numbers greater than 2 cannot be prime
+      candidate |= 1;
+  } while (!seal::util::is_prime(seal::Modulus(candidate)));
+  
+  return candidate;
 }

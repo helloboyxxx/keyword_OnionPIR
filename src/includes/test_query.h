@@ -1,6 +1,5 @@
 #pragma once
 
-#include "external_prod.h"
 #include "pir.h"
 #include "client.h"
 #include "server.h"
@@ -25,8 +24,6 @@ class PirTest {
     // An example of "enc then add" trick in generate_query
     void enc_then_add();
 
-    void gen_query_test();
-
-    // experiment another way of creating GSW query and test it on small server 128 * 2
-    void small_server_gsw_test();
+    // Testing the noise budget before and after the query expansion
+    // void noise_budget_test();
 };

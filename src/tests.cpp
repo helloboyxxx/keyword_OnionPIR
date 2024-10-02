@@ -1,11 +1,11 @@
 #include "tests.h"
 #include "external_prod.h"
 #include "pir.h"
-#include "seal/util/scalingvariant.h"
 #include "server.h"
 #include "utils.h"
 #include <cassert>
 #include <iostream>
+#include <fstream>
 #include <random>
 
 // "Default" Parameters for the PIR scheme
@@ -13,17 +13,8 @@
 #define NUM_DIM     8           // Number of dimensions of the hypercube
 #define NUM_ENTRIES 1 << 15     // Number of entries in the database
 #define ENTRY_SZ    12000       // Size of each entry in the database
-#define GSW_L       9           // Parameter for GSW scheme. If set to 7 or lower, likely to fail.
-#define GSW_L_KEY   9           // Not sure for now
-
-
-// // Small server parameters for the PIR scheme
-// #define DB_SZ       256     // Database size <==> Number of plaintexts in the database
-// #define NUM_DIM     2           // Number of dimensions of the hypercube
-// #define NUM_ENTRIES 256     // Number of entries in the database
-// #define ENTRY_SZ    12000       // Size of each entry in the database
-// #define GSW_L       9           // Parameter for GSW scheme. If set to 7 or lower, likely to fail.
-// #define GSW_L_KEY   9           // Not sure for now
+#define GSW_L       5           // Parameter for GSW scheme. 
+#define GSW_L_KEY   13          // GSW for query expansion
 
 
 #define EXPERIMENT_ITERATIONS 10
@@ -46,10 +37,12 @@ void run_tests() {
   // test_external_product();
 
   test_pir();
+  // find_best_params();
   // test_keyword_pir(); // two server version
   // test_cuckoo_keyword_pir(); // single server version
 
   // test_plain_to_gsw();
+  // test_prime_gen();
 
   PRINT_BAR;
   DEBUG_PRINT("Tests finished");
@@ -153,9 +146,6 @@ void test_external_product() {
   data_gsw.encrypt_plain_to_gsw(b, encryptor_, decryptor_, b_gsw);
   data_gsw.gsw_ntt_negacyclic_harvey(b_gsw);  // transform b_gsw to NTT form
 
-  debug(a_encrypted.data(0), "AENC[0]", coeff_count);
-  debug(a_encrypted.data(1), "AENC[1]", coeff_count);
-
   size_t mult_rounds = 1;
 
   for (int i = 0; i < mult_rounds; i++) {
@@ -179,7 +169,8 @@ void test_pir() {
   auto client_time_sum = 0;
   
   // setting parameters for PIR scheme
-  PirParams pir_params(DB_SZ, NUM_DIM, NUM_ENTRIES, ENTRY_SZ, GSW_L, GSW_L_KEY);
+  size_t entry_size = (seal::Modulus(DatabaseConstants::PlaintextMod).bit_count() - 1) * DatabaseConstants::PolyDegree / 8;
+  PirParams pir_params(DB_SZ, NUM_DIM, NUM_ENTRIES, entry_size, GSW_L, GSW_L_KEY);
   pir_params.print_values();
   PirServer server(pir_params); // Initialize the server with the parameters
 
@@ -464,4 +455,100 @@ void test_plain_to_gsw() {
 
 
 
+}
+
+
+
+void find_best_params() {
+  print_func_name(__FUNCTION__);
+
+  // open a file to write the results
+  std::ofstream file;
+  file.open("plain_mod_test.txt");
+  file << "bit_width, plain_mod, server_time, l, all_success" << std::endl;
+
+  std::uint64_t curr_plain_mod = 0;
+
+  for (size_t curr_l = 5; curr_l < 8; ++curr_l) {
+    for (size_t bit_width = 34; bit_width < 80; ++bit_width) {
+      // getting the current plain_mod
+      curr_plain_mod = generate_prime(bit_width);
+
+      // calculate the entry size in bytes
+      size_t entry_size = (bit_width - 1) * DatabaseConstants::PolyDegree / 8;
+
+      // setting parameters for PIR scheme
+      PirParams pir_params(DB_SZ, NUM_DIM, NUM_ENTRIES, 12000, curr_l,
+                          curr_l, curr_plain_mod);
+      pir_params.print_values();
+      PirServer server(pir_params); // Initialize the server with the parameters
+
+      std::cout << "Initializing server..." << std::endl;
+      // Data to be stored in the database.
+      std::vector<Entry> data = server.gen_data();
+
+      auto server_time_sum = 0;
+      bool all_success = true;
+      int end_iter = EXPERIMENT_ITERATIONS;
+      // Run the query process many times.
+      for (int i = 0; i < EXPERIMENT_ITERATIONS; i++) {
+        srand(time(0)); // reset the seed for the random number generator
+        // Initialize the client
+        PirClient client(pir_params);
+        const int client_id = rand();
+
+        server.decryptor_ = client.get_decryptor();
+        server.set_client_galois_key(client_id, client.create_galois_keys());
+        server.set_client_gsw_key(client_id, client.generate_gsw_from_key());
+
+        // === Client start generating query ===
+        size_t entry_index = rand() % pir_params.get_num_entries();
+        auto query = client.generate_query(entry_index);
+        
+        auto s_start_time = CURR_TIME;  // server start time for processing the query
+        auto result = server.make_query(client_id, std::move(query));
+        auto s_end_time = CURR_TIME;
+
+        // client gets result from the server and decrypts it
+        auto decrypted_result = client.decrypt_result(result);
+        Entry entry = client.get_entry_from_plaintext(entry_index, decrypted_result[0]);
+
+        // ================== Record the results ==================
+        std::cout << "Experiment [" << i << "]\tServer time: " << TIME_DIFF(s_start_time, s_end_time) << " ms" << std::endl;
+        server_time_sum += TIME_DIFF(s_start_time, s_end_time);
+
+        if (entry == data[entry_index]) {
+          // print a green success message
+          std::cout << "\033[1;32mSuccess!\033[0m" << std::endl;
+        } else {
+          // print a red failure message
+          std::cout << "\033[1;31mFailure!\033[0m" << std::endl;
+          all_success = false;
+          end_iter = i + 1;
+          break;
+        }
+      }
+
+      // record the data
+      // bit_width, mod, all_success, average server time
+      file << bit_width << " " << curr_plain_mod << " "
+          << " " << server_time_sum / end_iter << " "
+          << " " << curr_l << " " << all_success
+          << std::endl;
+
+      std::cout << "Average server time: " << server_time_sum / end_iter << " ms" << std::endl;
+    }
+  }
+  
+  
+  // close the file
+  file.close();
+
+}
+
+void test_prime_gen() {
+  print_func_name(__FUNCTION__);
+  for (size_t i = 25; i < 30; ++i) {
+    DEBUG_PRINT(generate_prime(i));
+  }
 }

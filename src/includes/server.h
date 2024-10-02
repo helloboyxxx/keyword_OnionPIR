@@ -3,7 +3,6 @@
 #include "client.h"
 #include "external_prod.h"
 #include "pir.h"
-#include "seal/seal.h"
 #include <optional>
 
 typedef std::vector<std::optional<seal::Plaintext>> Database;
@@ -41,8 +40,6 @@ public:
 
   // Given the client id and a packed client query, this function first unpacks the query, then returns the retrieved encrypted result.
   std::vector<seal::Ciphertext> make_query(uint32_t client_id, PirQuery &&query);
-  std::vector<seal::Ciphertext> make_query_delayed_mod(uint32_t client_id, PirQuery query);
-  std::vector<seal::Ciphertext> make_query_regular_mod(uint32_t client_id, PirQuery query);
 
   /**
    * @brief A clever way to evaluate the external product for second to last dimensions. 
@@ -75,7 +72,7 @@ private:
     Expands the first query ciphertext into a selection vector of ciphertexts
     where the ith ciphertext encodes the ith bit of the first query ciphertext.
   */
-  std::vector<seal::Ciphertext> expand_query(uint32_t client_id, seal::Ciphertext ciphertext);
+  std::vector<seal::Ciphertext> expand_query(uint32_t client_id, seal::Ciphertext &ciphertext) const;
   /*!
     Performs a cross product between the first selection vector and the
     database.
