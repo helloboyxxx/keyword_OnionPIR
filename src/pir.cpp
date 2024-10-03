@@ -8,7 +8,7 @@
 PirParams::PirParams(const uint64_t DBSize, const uint64_t first_dim_sz,
                      const uint64_t num_entries,
                      const uint64_t l, const uint64_t l_key,
-                     const size_t pt_mod_width, const std::vector<int> ct_mod_width,
+                     const size_t pt_mod_width, const std::vector<int> ct_mods,
                      const size_t hashed_key_width, const float blowup_factor)
     : DBSize_(DBSize),
       seal_params_(seal::EncryptionParameters(seal::scheme_type::bfv)),
@@ -28,8 +28,12 @@ PirParams::PirParams(const uint64_t DBSize, const uint64_t first_dim_sz,
   seal_params_.set_poly_modulus_degree(
       DatabaseConstants::PolyDegree); // example: a_1 x^4095 + a_2 x^4094 + ...
                                       // + a_4096 x^0
+  DEBUG_PRINT("bit_sizes: " << ct_mods.size());
+  DEBUG_PRINT("0: " << ct_mods[0]);
+  DEBUG_PRINT("1: " << ct_mods[1]); 
+  DEBUG_PRINT("2: " << ct_mods[2]); 
   seal_params_.set_coeff_modulus(
-      CoeffModulus::Create(DatabaseConstants::PolyDegree, ct_mod_width));
+      CoeffModulus::Create(DatabaseConstants::PolyDegree, ct_mods));
   seal_params_.set_plain_modulus(pt_mod);
 
   // =============== VALIDATION ===============

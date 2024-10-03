@@ -18,3 +18,8 @@ cmake-build-debug
 .cache
 temp/
 SEAL
+lib64/
+include/
+output.txt
+error.txt
+run_onion_pir.sbatch

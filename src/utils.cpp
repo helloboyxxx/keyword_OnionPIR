@@ -100,7 +100,7 @@ std::uint64_t generate_prime(size_t bit_width) {
   if (bit_width < 2) throw std::invalid_argument("Bit width must be at least 2.");
 
   // ================= Read from file if it exists
-  std::ifstream file("prime_cache.csv");
+  std::ifstream file("prime_cache.txt");
   if (file.is_open()) {
     std::string line;
     while (std::getline(file, line)) {
@@ -125,9 +125,9 @@ std::uint64_t generate_prime(size_t bit_width) {
   } while (!seal::util::is_prime(seal::Modulus(candidate)));
 
   // write the bit_width, candidate pair to csv file
-  std::string file_name = "prime_cache.csv";
-  std::ofstream out_file(file_name, std::ios::app);
-  if (file.is_open()) {
+  std::string file_name = "prime_cache.txt";
+  std::ofstream out_file(file_name);
+  if (out_file.is_open()) {
     out_file << bit_width << "," << candidate << std::endl;
     out_file.close();
   } else {

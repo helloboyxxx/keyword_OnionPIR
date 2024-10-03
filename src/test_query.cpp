@@ -7,7 +7,7 @@
 #define GSW_L_KEY         15            // GSW for query expansion
 #define FST_DIM_SZ        256           // Number of dimensions of the hypercube
 #define PT_MOD_WIDTH      25            // Width of the plain modulus 
-#define CT_MOD_WIDTH      {62, 62, 62}  // Coeff modulus for the BFV scheme
+#define CT_MODS      {62, 62, 62}  // Coeff modulus for the BFV scheme
 
 
 #define EXPERIMENT_ITER 1
@@ -40,7 +40,7 @@ void PirTest::gen_and_expand() {
 
   // ======================== Initialize the client and server
   PirParams pir_params(DB_SZ, FST_DIM_SZ, NUM_ENTRIES, GSW_L,
-                       GSW_L_KEY, PT_MOD_WIDTH, CT_MOD_WIDTH);
+                       GSW_L_KEY, PT_MOD_WIDTH, CT_MODS);
   pir_params.print_values();
   PirClient client(pir_params);
   srand(time(0));
@@ -92,7 +92,7 @@ void PirTest::enc_then_add() {
 
   // ======================== Initialize the client and server
   PirParams pir_params(DB_SZ, FST_DIM_SZ, NUM_ENTRIES, GSW_L,
-                       GSW_L_KEY, PT_MOD_WIDTH, CT_MOD_WIDTH);
+                       GSW_L_KEY, PT_MOD_WIDTH, CT_MODS);
   PirClient client(pir_params);
 
   // ======================== we try a simpler version of the client generate_query

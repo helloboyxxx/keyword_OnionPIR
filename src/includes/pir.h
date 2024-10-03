@@ -45,7 +45,7 @@ public:
   PirParams(const uint64_t DBSize, const uint64_t first_dim_sz,
             const uint64_t num_entries,
             const uint64_t l, const uint64_t l_key,
-            const size_t plain_mod_width, const std::vector<int> ct_mod_width, const size_t hashed_key_width = 0,
+            const size_t plain_mod_width, const std::vector<int> ct_mods, const size_t hashed_key_width = 0,
             const float blowup_factor = 1.0);
 
 

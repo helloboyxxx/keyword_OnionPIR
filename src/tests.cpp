@@ -15,8 +15,8 @@
 #define GSW_L             5             // Parameter for GSW scheme. 
 #define GSW_L_KEY         15            // GSW for query expansion
 #define FST_DIM_SZ        256           // Number of dimensions of the hypercube
-#define PT_MOD_WIDTH      25            // Width of the plain modulus 
-#define CT_MOD_WIDTH      {36, 36, 37}  // Coeff modulus for the BFV scheme
+#define PT_MOD_WIDTH      45            // Width of the plain modulus 
+#define CT_MODS	         {60, 60, 60}  // Coeff modulus for the BFV scheme
 
 
 #define EXPERIMENT_ITERATIONS 10
@@ -38,13 +38,13 @@ void run_tests() {
   // bfv_example();
   // test_external_product();
 
-  test_pir();
+  // test_pir();
   // find_best_params();
   // test_keyword_pir(); // two server version
   // test_cuckoo_keyword_pir(); // single server version
 
   // test_plain_to_gsw();
-  // test_prime_gen();
+  test_prime_gen();
 
   PRINT_BAR;
   DEBUG_PRINT("Tests finished");
@@ -99,7 +99,7 @@ void bfv_example() {
 void test_external_product() {
   print_func_name(__FUNCTION__);
   // PirParams pir_params(256, 2, 20000, 5, 15, 15);
-  PirParams pir_params(DB_SZ, FST_DIM_SZ, NUM_ENTRIES, GSW_L, GSW_L_KEY, PT_MOD_WIDTH, CT_MOD_WIDTH);
+  PirParams pir_params(DB_SZ, FST_DIM_SZ, NUM_ENTRIES, GSW_L, GSW_L_KEY, PT_MOD_WIDTH, CT_MODS);
   pir_params.print_values();
   auto parms = pir_params.get_seal_params();    // This parameter is set to be: seal::scheme_type::bfv
   auto context_ = seal::SEALContext(parms);   // Then this context_ knows that it is using BFV scheme
@@ -174,7 +174,7 @@ void test_pir() {
   
   // setting parameters for PIR scheme
   PirParams pir_params(DB_SZ, FST_DIM_SZ, NUM_ENTRIES, GSW_L,
-                       GSW_L_KEY, PT_MOD_WIDTH, CT_MOD_WIDTH);
+                       GSW_L_KEY, PT_MOD_WIDTH, CT_MODS);
   pir_params.print_values();
   PirServer server(pir_params); // Initialize the server with the parameters
 
@@ -239,7 +239,7 @@ void test_pir() {
 void test_keyword_pir() {
   print_func_name(__FUNCTION__);
   int table_size = 1 << 15;
-  PirParams pir_params(DB_SZ, FST_DIM_SZ, NUM_ENTRIES, GSW_L, GSW_L_KEY, PT_MOD_WIDTH, CT_MOD_WIDTH);
+  PirParams pir_params(DB_SZ, FST_DIM_SZ, NUM_ENTRIES, GSW_L, GSW_L_KEY, PT_MOD_WIDTH, CT_MODS);
   pir_params.print_values();
   const int client_id = 0;
   PirServer server1(pir_params), server2(pir_params);
@@ -362,7 +362,7 @@ void test_cuckoo_keyword_pir() {
   const size_t hashed_key_width = 16;
   const size_t DBSize_ = 1 << 16;
   const size_t num_entries = 1 << 16;
-  PirParams pir_params(DBSize_, FST_DIM_SZ, num_entries, GSW_L, GSW_L_KEY, PT_MOD_WIDTH, CT_MOD_WIDTH, hashed_key_width, blowup_factor);
+  PirParams pir_params(DBSize_, FST_DIM_SZ, num_entries, GSW_L, GSW_L_KEY, PT_MOD_WIDTH, CT_MODS, hashed_key_width, blowup_factor);
   pir_params.print_values();
   PirServer server(pir_params);
 
@@ -431,7 +431,7 @@ void test_plain_to_gsw() {
   print_func_name(__FUNCTION__);
 
   // ================== Preparing parameters ==================
-  PirParams pir_params(DB_SZ, FST_DIM_SZ, NUM_ENTRIES, GSW_L, GSW_L_KEY, PT_MOD_WIDTH, CT_MOD_WIDTH);
+  PirParams pir_params(DB_SZ, FST_DIM_SZ, NUM_ENTRIES, GSW_L, GSW_L_KEY, PT_MOD_WIDTH, CT_MODS);
   auto parms = pir_params.get_seal_params();    // This parameter is set to be: seal::scheme_type::bfv
   auto context_ = seal::SEALContext(parms);   // Then this context_ knows that it is using BFV scheme
   auto evaluator_ = seal::Evaluator(context_);
@@ -470,20 +470,14 @@ void find_best_params() {
   // open a file to write the results
   std::ofstream file;
   file.open("plain_mod_test.txt");
-  file << "bit_width, plain_mod, server_time, l, all_success" << std::endl;
+  file << "pt_mod_width, l, l_key, server_time, all_success" << std::endl;
 
-  std::uint64_t curr_plain_mod = 0;
-
-  for (size_t curr_l = 5; curr_l < 8; ++curr_l) {
-    for (size_t bit_width = 34; bit_width < 80; ++bit_width) {
-      // getting the current plain_mod
-      curr_plain_mod = generate_prime(bit_width);
-
-      // calculate the entry size in bytes
-      size_t entry_size = (bit_width - 1) * DatabaseConstants::PolyDegree / 8;
-
+for (size_t curr_l_key = 7; curr_l_key < 18; ++curr_l_key) {
+  for (size_t curr_l = 3; curr_l < 11; ++curr_l) {
+    for (size_t bit_width = 20; bit_width < 61; ++bit_width) {
       // setting parameters for PIR scheme
-      PirParams pir_params(256, 2, 20000, curr_l, 15, bit_width, {62, 62, 62});
+      PirParams pir_params(DB_SZ, FST_DIM_SZ, NUM_ENTRIES, curr_l,
+                       curr_l_key, bit_width, CT_MODS);
       pir_params.print_values();
       PirServer server(pir_params); // Initialize the server with the parameters
 
@@ -535,15 +529,15 @@ void find_best_params() {
 
       // record the data
       // bit_width, mod, all_success, average server time
-      file << bit_width << " " << curr_plain_mod << " "
+      file << bit_width << " " << curr_l << " " << curr_l_key
           << " " << server_time_sum / end_iter << " "
-          << " " << curr_l << " " << all_success
+          << " " << all_success
           << std::endl;
 
       std::cout << "Average server time: " << server_time_sum / end_iter << " ms" << std::endl;
     }
   }
-  
+}  
   
   // close the file
   file.close();
@@ -552,7 +546,7 @@ void find_best_params() {
 
 void test_prime_gen() {
   print_func_name(__FUNCTION__);
-  for (size_t i = 25; i < 30; ++i) {
+  for (size_t i = 2; i < 65; ++i) {
     DEBUG_PRINT(generate_prime(i));
   }
 }
