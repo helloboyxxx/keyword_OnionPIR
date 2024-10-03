@@ -27,14 +27,15 @@ PirParams::PirParams(const uint64_t DBSize, const uint64_t first_dim_sz,
   // encryption and decryption.
   seal_params_.set_poly_modulus_degree(
       DatabaseConstants::PolyDegree); // example: a_1 x^4095 + a_2 x^4094 + ...
-                                      // + a_4096 x^0
-  DEBUG_PRINT("bit_sizes: " << ct_mods.size());
-  DEBUG_PRINT("0: " << ct_mods[0]);
-  DEBUG_PRINT("1: " << ct_mods[1]); 
-  DEBUG_PRINT("2: " << ct_mods[2]); 
+
   seal_params_.set_coeff_modulus(
       CoeffModulus::Create(DatabaseConstants::PolyDegree, ct_mods));
   seal_params_.set_plain_modulus(pt_mod);
+
+  // print the coefficent modulus
+  DEBUG_PRINT("mod 0: " << seal_params_.coeff_modulus()[0].value());
+  DEBUG_PRINT("mod 1: " << seal_params_.coeff_modulus()[1].value());
+  DEBUG_PRINT("mod 2: " << seal_params_.coeff_modulus()[2].value());
 
   // =============== VALIDATION ===============
   if (first_dim_sz < 128) {

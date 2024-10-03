@@ -12,7 +12,10 @@
 PirServer::PirServer(const PirParams &pir_params)
     : pir_params_(pir_params), context_(pir_params.get_seal_params()),
       DBSize_(pir_params.get_DBSize()), evaluator_(context_), dims_(pir_params.get_dims()),
-      hashed_key_width_(pir_params_.get_hashed_key_width()) {}
+      hashed_key_width_(pir_params_.get_hashed_key_width()) {
+
+        DEBUG_PRINT("Server initialized");
+}
 
 // Fills the database with random data
 std::vector<Entry> PirServer::gen_data() {

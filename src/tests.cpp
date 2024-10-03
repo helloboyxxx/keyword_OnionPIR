@@ -1,5 +1,4 @@
 #include "tests.h"
-#include "database_constants.h"
 #include "external_prod.h"
 #include "pir.h"
 #include "server.h"
@@ -10,12 +9,12 @@
 #include <random>
 
 // "Default" Parameters for the PIR scheme
-#define DB_SZ             1 << 15       // Database size <==> Number of plaintexts in the database
-#define NUM_ENTRIES       1 << 15       // Number of entries in the database
+#define DB_SZ             1 << 18       // Database size <==> Number of plaintexts in the database
+#define NUM_ENTRIES       1 << 18       // Number of entries in the database
 #define GSW_L             5             // Parameter for GSW scheme. 
 #define GSW_L_KEY         15            // GSW for query expansion
 #define FST_DIM_SZ        256           // Number of dimensions of the hypercube
-#define PT_MOD_WIDTH      45            // Width of the plain modulus 
+#define PT_MOD_WIDTH      50            // Width of the plain modulus 
 #define CT_MODS	         {60, 60, 60}  // Coeff modulus for the BFV scheme
 
 
@@ -39,12 +38,13 @@ void run_tests() {
   // test_external_product();
 
   // test_pir();
+  find_pt_mod_width();
   // find_best_params();
   // test_keyword_pir(); // two server version
   // test_cuckoo_keyword_pir(); // single server version
 
   // test_plain_to_gsw();
-  test_prime_gen();
+  // test_prime_gen();
 
   PRINT_BAR;
   DEBUG_PRINT("Tests finished");
@@ -176,6 +176,13 @@ void test_pir() {
   PirParams pir_params(DB_SZ, FST_DIM_SZ, NUM_ENTRIES, GSW_L,
                        GSW_L_KEY, PT_MOD_WIDTH, CT_MODS);
   pir_params.print_values();
+  DEBUG_PRINT("1");
+  PirParams pir_params_ = pir_params;
+  DEBUG_PRINT("2");
+  auto context = pir_params.get_seal_params();
+  DEBUG_PRINT("3");
+  seal::Evaluator evaluator(context);
+  DEBUG_PRINT("4");
   PirServer server(pir_params); // Initialize the server with the parameters
 
   std::cout << "Initializing server..." << std::endl;
@@ -213,7 +220,7 @@ void test_pir() {
     
     std::cout << "Experiment [" << i << "]\tServer time: " << TIME_DIFF(s_start_time, s_end_time) << " ms" << std::endl;
     std::cout << "\t\tClient Time: " << TIME_DIFF(c_start_time, c_end_time) - TIME_DIFF(s_start_time, s_end_time) << " ms" << std::endl;
-    // std::cout << "Noise budget left: " << client.get_decryptor()->invariant_noise_budget(result[0]) << std::endl;
+    std::cout << "Noise budget left: " << client.get_decryptor()->invariant_noise_budget(result[0]) << std::endl;
 
     server_time_sum += TIME_DIFF(s_start_time, s_end_time);
     client_time_sum += TIME_DIFF(c_start_time, c_end_time) - TIME_DIFF(s_start_time, s_end_time);
@@ -464,81 +471,157 @@ void test_plain_to_gsw() {
 
 
 
+void find_pt_mod_width() {
+  print_func_name(__FUNCTION__);
+
+  // open a file to write the results
+  std::ofstream file;
+  file.open("../outputs/best_pt_mod.txt");
+  file << "pt_mod_width, server_time, success_rate" << std::endl;
+
+  for (size_t bit_width = 40; bit_width < 61; ++bit_width) {
+    // setting parameters for PIR scheme
+    PirParams pir_params(DB_SZ, FST_DIM_SZ, NUM_ENTRIES, GSW_L, GSW_L_KEY, bit_width, CT_MODS);
+    pir_params.print_values();
+    PirServer server(pir_params); // Setup server params
+
+    std::cout << "Initializing server..." << std::endl;
+    // Radomly generate data to be stored in the database.
+    std::vector<Entry> data = server.gen_data();
+
+    auto server_time_sum = 0;
+    size_t success_cnt = 0;
+    // Run the query process many times.
+    for (int i = 0; i < EXPERIMENT_ITERATIONS; i++) {
+      srand(time(0)); // reset the seed for the random number generator
+      // Initialize the client
+      PirClient client(pir_params);
+      const int client_id = rand();
+
+      server.decryptor_ = client.get_decryptor();
+      server.set_client_galois_key(client_id, client.create_galois_keys());
+      server.set_client_gsw_key(client_id, client.generate_gsw_from_key());
+
+      // === Client start generating query ===
+      size_t entry_index = rand() % pir_params.get_num_entries();
+      auto query = client.generate_query(entry_index);
+
+      auto s_start_time =
+          CURR_TIME; // server start time for processing the query
+      auto result = server.make_query(client_id, std::move(query));
+      auto s_end_time = CURR_TIME;
+
+      // client gets result from the server and decrypts it
+      auto decrypted_result = client.decrypt_result(result);
+      Entry entry =
+          client.get_entry_from_plaintext(entry_index, decrypted_result[0]);
+
+      // ================== Record the results ==================
+      std::cout << "Experiment [" << i
+                << "]\tServer time: " << TIME_DIFF(s_start_time, s_end_time)
+                << " ms" << std::endl;
+      server_time_sum += TIME_DIFF(s_start_time, s_end_time);
+
+      if (entry == data[entry_index]) {
+        // print a green success message
+        std::cout << "\033[1;32mSuccess!\033[0m" << std::endl;
+        success_cnt++;
+      } else {
+        // print a red failure message
+        std::cout << "\033[1;31mFailure!\033[0m" << std::endl;
+        break;
+      }
+    }
+    
+    // record the data
+    // bit_width, mod, success_rate, average server time
+    file << bit_width << " " << server_time_sum / EXPERIMENT_ITERATIONS << " "
+         << (double)success_cnt / (double)EXPERIMENT_ITERATIONS << std::endl;
+  }
+}
+
+
+
 void find_best_params() {
   print_func_name(__FUNCTION__);
 
   // open a file to write the results
   std::ofstream file;
-  file.open("plain_mod_test.txt");
+  file.open("../outputs/best_param.txt");
   file << "pt_mod_width, l, l_key, server_time, all_success" << std::endl;
 
-for (size_t curr_l_key = 7; curr_l_key < 18; ++curr_l_key) {
-  for (size_t curr_l = 3; curr_l < 11; ++curr_l) {
-    for (size_t bit_width = 20; bit_width < 61; ++bit_width) {
-      // setting parameters for PIR scheme
-      PirParams pir_params(DB_SZ, FST_DIM_SZ, NUM_ENTRIES, curr_l,
-                       curr_l_key, bit_width, CT_MODS);
-      pir_params.print_values();
-      PirServer server(pir_params); // Initialize the server with the parameters
+  for (size_t curr_l_key = 7; curr_l_key < 18; ++curr_l_key) {
+    for (size_t curr_l = 3; curr_l < 11; ++curr_l) {
+      for (size_t bit_width = 20; bit_width < 61; ++bit_width) {
+        // setting parameters for PIR scheme
+        PirParams pir_params(DB_SZ, FST_DIM_SZ, NUM_ENTRIES, curr_l, curr_l_key,
+                             bit_width, CT_MODS);
+        pir_params.print_values();
+        PirServer server(
+            pir_params); // Initialize the server with the parameters
 
-      std::cout << "Initializing server..." << std::endl;
-      // Data to be stored in the database.
-      std::vector<Entry> data = server.gen_data();
+        std::cout << "Initializing server..." << std::endl;
+        // Data to be stored in the database.
+        std::vector<Entry> data = server.gen_data();
 
-      auto server_time_sum = 0;
-      bool all_success = true;
-      int end_iter = EXPERIMENT_ITERATIONS;
-      // Run the query process many times.
-      for (int i = 0; i < EXPERIMENT_ITERATIONS; i++) {
-        srand(time(0)); // reset the seed for the random number generator
-        // Initialize the client
-        PirClient client(pir_params);
-        const int client_id = rand();
+        auto server_time_sum = 0;
+        bool all_success = true;
+        int end_iter = EXPERIMENT_ITERATIONS;
+        // Run the query process many times.
+        for (int i = 0; i < EXPERIMENT_ITERATIONS; i++) {
+          srand(time(0)); // reset the seed for the random number generator
+          // Initialize the client
+          PirClient client(pir_params);
+          const int client_id = rand();
 
-        server.decryptor_ = client.get_decryptor();
-        server.set_client_galois_key(client_id, client.create_galois_keys());
-        server.set_client_gsw_key(client_id, client.generate_gsw_from_key());
+          server.decryptor_ = client.get_decryptor();
+          server.set_client_galois_key(client_id, client.create_galois_keys());
+          server.set_client_gsw_key(client_id, client.generate_gsw_from_key());
 
-        // === Client start generating query ===
-        size_t entry_index = rand() % pir_params.get_num_entries();
-        auto query = client.generate_query(entry_index);
-        
-        auto s_start_time = CURR_TIME;  // server start time for processing the query
-        auto result = server.make_query(client_id, std::move(query));
-        auto s_end_time = CURR_TIME;
+          // === Client start generating query ===
+          size_t entry_index = rand() % pir_params.get_num_entries();
+          auto query = client.generate_query(entry_index);
 
-        // client gets result from the server and decrypts it
-        auto decrypted_result = client.decrypt_result(result);
-        Entry entry = client.get_entry_from_plaintext(entry_index, decrypted_result[0]);
+          auto s_start_time =
+              CURR_TIME; // server start time for processing the query
+          auto result = server.make_query(client_id, std::move(query));
+          auto s_end_time = CURR_TIME;
 
-        // ================== Record the results ==================
-        std::cout << "Experiment [" << i << "]\tServer time: " << TIME_DIFF(s_start_time, s_end_time) << " ms" << std::endl;
-        server_time_sum += TIME_DIFF(s_start_time, s_end_time);
+          // client gets result from the server and decrypts it
+          auto decrypted_result = client.decrypt_result(result);
+          Entry entry =
+              client.get_entry_from_plaintext(entry_index, decrypted_result[0]);
 
-        if (entry == data[entry_index]) {
-          // print a green success message
-          std::cout << "\033[1;32mSuccess!\033[0m" << std::endl;
-        } else {
-          // print a red failure message
-          std::cout << "\033[1;31mFailure!\033[0m" << std::endl;
-          all_success = false;
-          end_iter = i + 1;
-          break;
+          // ================== Record the results ==================
+          std::cout << "Experiment [" << i
+                    << "]\tServer time: " << TIME_DIFF(s_start_time, s_end_time)
+                    << " ms" << std::endl;
+          server_time_sum += TIME_DIFF(s_start_time, s_end_time);
+
+          if (entry == data[entry_index]) {
+            // print a green success message
+            std::cout << "\033[1;32mSuccess!\033[0m" << std::endl;
+          } else {
+            // print a red failure message
+            std::cout << "\033[1;31mFailure!\033[0m" << std::endl;
+            all_success = false;
+            end_iter = i + 1;
+            break;
+          }
         }
+
+        // record the data
+        // bit_width, mod, all_success, average server time
+        file << bit_width << " " << curr_l << " " << curr_l_key << " "
+             << server_time_sum / end_iter << " "
+             << " " << all_success << std::endl;
+
+        std::cout << "Average server time: " << server_time_sum / end_iter
+                  << " ms" << std::endl;
       }
-
-      // record the data
-      // bit_width, mod, all_success, average server time
-      file << bit_width << " " << curr_l << " " << curr_l_key
-          << " " << server_time_sum / end_iter << " "
-          << " " << all_success
-          << std::endl;
-
-      std::cout << "Average server time: " << server_time_sum / end_iter << " ms" << std::endl;
     }
   }
-}  
-  
+
   // close the file
   file.close();
 
