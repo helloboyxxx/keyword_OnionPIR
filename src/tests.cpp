@@ -9,16 +9,15 @@
 #include <random>
 
 // "Default" Parameters for the PIR scheme
-#define DB_SZ             1 << 18       // Database size <==> Number of plaintexts in the database
-#define NUM_ENTRIES       1 << 18       // Number of entries in the database
+#define DB_SZ             1 << 10       // Database size <==> Number of plaintexts in the database
+#define NUM_ENTRIES       1 << 10       // Number of entries in the database
 #define GSW_L             5             // Parameter for GSW scheme. 
 #define GSW_L_KEY         15            // GSW for query expansion
 #define FST_DIM_SZ        256           // Number of dimensions of the hypercube
-#define PT_MOD_WIDTH      50            // Width of the plain modulus 
+#define PT_MOD_WIDTH      49            // Width of the plain modulus 
 #define CT_MODS	         {60, 60, 60}  // Coeff modulus for the BFV scheme
 
-
-#define EXPERIMENT_ITERATIONS 10
+#define EXPERIMENT_ITERATIONS 3
 
 void print_func_name(std::string func_name) {
 #ifdef _DEBUG
@@ -36,6 +35,7 @@ void run_tests() {
   // If we compare the following two examples, we do see that external product increase the noise much slower than BFV x BFV.
   // bfv_example();
   // test_external_product();
+  // test_bfv_seed();
 
   // test_pir();
   find_pt_mod_width();
@@ -162,6 +162,26 @@ void test_external_product() {
   // output decrypted result
   std::cout << "External product result: " << result.to_string() << std::endl;
   }
+}
+
+
+// Let's try generating a BFV ciphertext with one polynomial replaced by the prg seed.
+void test_bfv_seed() {
+  EncryptionParameters parms(scheme_type::bfv);
+  size_t poly_degree = 4096;
+  parms.set_poly_modulus_degree(poly_degree);
+  parms.set_coeff_modulus(CoeffModulus::BFVDefault(poly_degree));
+  SEALContext context_(parms);
+  auto evaluator_ = seal::Evaluator(context_);
+  auto keygen_ = seal::KeyGenerator(context_);
+  auto secret_key_ = keygen_.secret_key();
+  auto encryptor_ = new seal::Encryptor(context_, secret_key_);
+  auto decryptor_ = new seal::Decryptor(context_, secret_key_);
+
+  // Create a ciphertext 0
+  Serializable<Ciphertext> zero = encryptor_->encrypt_zero_symmetric();
+  // 
+
 }
 
 

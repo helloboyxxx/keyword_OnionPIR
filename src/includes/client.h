@@ -51,9 +51,9 @@ private:
   size_t get_database_plain_index(size_t entry_index);
 
   /*!
-      Gets the query indexes for a given plaintext
+      Gets the query indices for a given plaintext
   */
-  std::vector<size_t> get_query_indexes(size_t plaintext_index);
+  std::vector<size_t> get_query_indices(size_t plaintext_index);
 
   friend class PirTest;
 

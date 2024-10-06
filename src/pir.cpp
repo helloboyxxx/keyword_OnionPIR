@@ -32,11 +32,6 @@ PirParams::PirParams(const uint64_t DBSize, const uint64_t first_dim_sz,
       CoeffModulus::Create(DatabaseConstants::PolyDegree, ct_mods));
   seal_params_.set_plain_modulus(pt_mod);
 
-  // print the coefficent modulus
-  DEBUG_PRINT("mod 0: " << seal_params_.coeff_modulus()[0].value());
-  DEBUG_PRINT("mod 1: " << seal_params_.coeff_modulus()[1].value());
-  DEBUG_PRINT("mod 2: " << seal_params_.coeff_modulus()[2].value());
-
   // =============== VALIDATION ===============
   if (first_dim_sz < 128) {
     throw std::invalid_argument("Size of first dimension is too small");

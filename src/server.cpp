@@ -261,9 +261,15 @@ Entry generate_entry(int id, size_t entry_size) {
   // According to the notes in: https://en.cppreference.com/w/cpp/numeric/random/rand, 
   // rand() is not recommended for serious random-number generation needs. Therefore we need this mt19937.
   // Other methods are recommended in: 
-  std::mt19937_64 rng(id); 
-  for (int i = 0; i < entry_size; i++) {
-    entry.push_back(rng() % 256); // 256 is the maximum value of a byte
+
+  // std::mt19937_64 rng(id); 
+  // for (int i = 0; i < entry_size; i++) {
+  //   entry.push_back(rng() % 256); // 256 is the maximum value of a byte
+  // }
+
+  // TODO: Remove this temp test.
+  for (uint64_t i = 0; i < entry_size; i++) {
+    entry.push_back(i % 256); // 256 is the maximum value of a byte
   }
 
   // sample entry print. Should look like: 
@@ -398,10 +404,10 @@ std::vector<seal::Ciphertext> PirServer::make_query(uint32_t client_id, PirQuery
   evaluator_.mod_switch_to_next_inplace(result[0]); // result.size() == 1.
 
   // ========================== Timing ==========================
-  DEBUG_PRINT("Expand time: " << TIME_DIFF(expand_start, expand_end) << "ms");
-  DEBUG_PRINT("Convert time: " << TIME_DIFF(convert_start, convert_end) << "ms");
-  DEBUG_PRINT("First dim time: " << TIME_DIFF(first_dim_start, first_dim_end) << "ms");
-  DEBUG_PRINT("Other dim time: " << TIME_DIFF(other_dim_start, other_dim_end) << "ms");
+  BENCH_PRINT("Expand time: " << TIME_DIFF(expand_start, expand_end) << "ms");
+  BENCH_PRINT("Convert time: " << TIME_DIFF(convert_start, convert_end) << "ms");
+  BENCH_PRINT("First dim time: " << TIME_DIFF(first_dim_start, first_dim_end) << "ms");
+  BENCH_PRINT("Other dim time: " << TIME_DIFF(other_dim_start, other_dim_end) << "ms");
 
   return result;
 }

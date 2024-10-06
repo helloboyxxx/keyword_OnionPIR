@@ -97,7 +97,7 @@ void PirTest::enc_then_add() {
 
   // ======================== we try a simpler version of the client generate_query
   size_t plaintext_index = client.get_database_plain_index(entry_idx); // fixed index for testing
-  std::vector<size_t> query_indexes = client.get_query_indexes(plaintext_index);
+  std::vector<size_t> query_indices = client.get_query_indices(plaintext_index);
 
   auto context_data = client.context_->first_context_data();
   auto coeff_modulus = context_data->parms().coeff_modulus();

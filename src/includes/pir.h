@@ -18,6 +18,8 @@
 #define DEBUG_PRINT(s) ; // do nothing
 #endif
 
+#define BENCH_PRINT(s) std::cout << s << std::endl;
+
 #define PRINT_BAR DEBUG_PRINT("==============================================================");
 
 // ================== NAMESPACES  ==================

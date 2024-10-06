@@ -2,6 +2,7 @@
 
 void run_tests();
 void bfv_example();
+void test_bfv_seed();
 void test_external_product();
 void test_keyword_pir();
 void test_cuckoo_keyword_pir();

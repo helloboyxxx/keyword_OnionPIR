@@ -48,26 +48,26 @@ size_t PirClient::get_database_plain_index(size_t entry_index) {
   return entry_index / pir_params_.get_num_entries_per_plaintext();
 }
 
-std::vector<size_t> PirClient::get_query_indexes(size_t plaintext_index) {
-  std::vector<size_t> query_indexes;
+std::vector<size_t> PirClient::get_query_indices(size_t plaintext_index) {
+  std::vector<size_t> query_indices;
   size_t index = plaintext_index;
   size_t size_of_remaining_dims = DBSize_;
 
   for (auto dim_size : dims_) {
     size_of_remaining_dims /= dim_size;
-    query_indexes.push_back(index / size_of_remaining_dims);
+    query_indices.push_back(index / size_of_remaining_dims);
     index = index % size_of_remaining_dims;
   }
 
-  return query_indexes;
+  return query_indices;
 }
 
 PirQuery PirClient::generate_query(std::uint64_t entry_index) {
 
   // Get the corresponding index of the plaintext in the database
   size_t plaintext_index = get_database_plain_index(entry_index);
-  std::vector<size_t> query_indexes = get_query_indexes(plaintext_index);
-  PRINT_INT_ARRAY("query_indexes", query_indexes.data(), query_indexes.size());
+  std::vector<size_t> query_indices = get_query_indices(plaintext_index);
+  PRINT_INT_ARRAY("query_indices", query_indices.data(), query_indices.size());
   uint64_t coeff_count = params_.poly_modulus_degree(); // 4096
 
   // The number of bits required for the first dimension is equal to the size of the first dimension
@@ -87,7 +87,7 @@ PirQuery PirClient::generate_query(std::uint64_t entry_index) {
   seal::util::try_invert_uint_mod(bits_per_ciphertext, plain_modulus, inverse);
 
   // Add the first dimension query vector to the query
-  plain_query[ query_indexes[0] ] = inverse;
+  plain_query[ query_indices[0] ] = inverse;
   
   // Encrypt plain_query first. Later we will insert the rest.
   PirQuery query; // pt in paper
@@ -112,11 +112,11 @@ PirQuery PirClient::generate_query(std::uint64_t entry_index) {
 
   // This for-loop corresponds to the for-loop in Algorithm 1 from the OnionPIR paper
   int filled_cnt = dims_[0];  // we have already filled these many coefficients
-  for (int i = 1; i < query_indexes.size(); i++) {  // dimensions
+  for (int i = 1; i < query_indices.size(); i++) {  // dimensions
     // we use this if statement to replce the j for loop in Algorithm 1. This is because N_i = 2 for all i > 0
     // When 0 is requested, we use initial encrypted value of PirQuery query, where the coefficients decrypts to 0. 
     // When 1 is requested, we add special values to the coefficients of the query so that they decrypts to correct GSW(1) values.
-    if (query_indexes[i] == 1) {
+    if (query_indices[i] == 1) {
       // ! pt is a ct_coeff_type *. It points to the current position to be written.
       auto ptr = query.data(0) + filled_cnt;  // points to the current collection of coefficients to be written
       for (int k = 0; k < l; k++) {
