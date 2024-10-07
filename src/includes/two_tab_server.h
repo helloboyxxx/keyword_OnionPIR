@@ -72,9 +72,9 @@ private:
   */
   std::vector<seal::Ciphertext> evaluate_first_dim(std::vector<seal::Ciphertext> &selection_vector);
   std::vector<seal::Ciphertext>
-  evaluate_first_dim_delayed_mod(std::vector<seal::Ciphertext> &selection_vector);
+  evaluate_first_dim(std::vector<seal::Ciphertext> &selection_vector);
   std::vector<seal::Ciphertext>
-  evaluate_first_dim_delayed_mod2(std::vector<seal::Ciphertext> &selection_vector);
+  evaluate_first_dim2(std::vector<seal::Ciphertext> &selection_vector);
 
   /*!
     Transforms the plaintexts in the database into their NTT representation.

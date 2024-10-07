@@ -69,7 +69,7 @@ public:
    */
   void gsw_ntt_negacyclic_harvey(GSWCiphertext &gsw);
 
-  void cyphertext_inverse_ntt(seal::Ciphertext &ct);
+  void ciphertext_inverse_ntt(seal::Ciphertext &ct);
 
   uint64_t l;
   uint64_t base_log2;

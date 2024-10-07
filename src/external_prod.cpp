@@ -31,7 +31,7 @@ void GSWEval::gsw_ntt_negacyclic_harvey(GSWCiphertext &gsw) {
   }
 }
 
-void GSWEval::cyphertext_inverse_ntt(seal::Ciphertext &ct) {
+void GSWEval::ciphertext_inverse_ntt(seal::Ciphertext &ct) {
   const auto &context_data = context->first_context_data();
   auto &parms2 = context_data->parms();
   auto &coeff_modulus = parms2.coeff_modulus();

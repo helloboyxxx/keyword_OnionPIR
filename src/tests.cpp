@@ -14,10 +14,10 @@
 #define GSW_L             5             // Parameter for GSW scheme. 
 #define GSW_L_KEY         15            // GSW for query expansion
 #define FST_DIM_SZ        256           // Number of dimensions of the hypercube
-#define PT_MOD_WIDTH      49            // Width of the plain modulus 
+#define PT_MOD_WIDTH      48            // Width of the plain modulus 
 #define CT_MODS	         {60, 60, 60}  // Coeff modulus for the BFV scheme
 
-#define EXPERIMENT_ITERATIONS 3
+#define EXPERIMENT_ITERATIONS 1
 
 void print_func_name(std::string func_name) {
 #ifdef _DEBUG
@@ -35,10 +35,10 @@ void run_tests() {
   // If we compare the following two examples, we do see that external product increase the noise much slower than BFV x BFV.
   // bfv_example();
   // test_external_product();
-  // test_bfv_seed();
+  test_ct_sub();
 
   // test_pir();
-  find_pt_mod_width();
+  // find_pt_mod_width();
   // find_best_params();
   // test_keyword_pir(); // two server version
   // test_cuckoo_keyword_pir(); // single server version
@@ -154,7 +154,7 @@ void test_external_product() {
 
   for (int i = 0; i < mult_rounds; i++) {
     data_gsw.external_product(b_gsw, a_encrypted, coeff_count, a_encrypted);
-    data_gsw.cyphertext_inverse_ntt(a_encrypted);
+    data_gsw.ciphertext_inverse_ntt(a_encrypted);
     decryptor_.decrypt(a_encrypted, result);
     std::cout << "Noise budget after: " << decryptor_.invariant_noise_budget(a_encrypted)
               << std::endl;
@@ -164,24 +164,46 @@ void test_external_product() {
   }
 }
 
-
-// Let's try generating a BFV ciphertext with one polynomial replaced by the prg seed.
-void test_bfv_seed() {
-  EncryptionParameters parms(scheme_type::bfv);
-  size_t poly_degree = 4096;
-  parms.set_poly_modulus_degree(poly_degree);
-  parms.set_coeff_modulus(CoeffModulus::BFVDefault(poly_degree));
-  SEALContext context_(parms);
+// This is a simple test for demonstrating that we are expecting a "transparent"
+// ciphertext if we have two identical ciphertext(value equal) subtracted. This
+// is because it is possible to have two entries in the database that are thesame. 
+// Please use -DSEAL_THROW_ON_TRANSPARENT_CIPHERTEXT=OFF flag when compiling SEAL.
+void test_ct_sub() {
+  print_func_name(__FUNCTION__);
+  PirParams pir_params(DB_SZ, FST_DIM_SZ, NUM_ENTRIES, GSW_L, GSW_L_KEY, PT_MOD_WIDTH, CT_MODS);
+  auto parms = pir_params.get_seal_params();    // This parameter is set to be: seal::scheme_type::bfv
+  auto context_ = seal::SEALContext(parms);
   auto evaluator_ = seal::Evaluator(context_);
   auto keygen_ = seal::KeyGenerator(context_);
   auto secret_key_ = keygen_.secret_key();
   auto encryptor_ = new seal::Encryptor(context_, secret_key_);
   auto decryptor_ = new seal::Decryptor(context_, secret_key_);
 
-  // Create a ciphertext 0
-  Serializable<Ciphertext> zero = encryptor_->encrypt_zero_symmetric();
-  // 
+  // Create a ciphertext of 1
+  seal::Plaintext c(pir_params.get_seal_params().poly_modulus_degree());
+  c[0] = 2;
+  seal::Ciphertext c_encrypted(context_);
+  encryptor_->encrypt_symmetric(c, c_encrypted);
 
+  // Create two plaintexts of 3. This mimics the two identical entries in the database
+  seal::Plaintext pt1(pir_params.get_seal_params().poly_modulus_degree());
+  seal::Plaintext pt2(pir_params.get_seal_params().poly_modulus_degree());
+  pt1[0] = 3; 
+  pt2[0] = 3;
+
+  // Multiplication of a * pt1 and a * pt2
+  seal::Ciphertext result_1(context_);
+  seal::Ciphertext result_2(context_);
+  evaluator_.multiply_plain(c_encrypted, pt1, result_1);
+  evaluator_.multiply_plain(c_encrypted, pt2, result_2);
+
+  // Subtraction
+  evaluator_.sub_inplace(result_1, result_2);
+
+  // Decrypt the result
+  seal::Plaintext result_pt;
+  decryptor_->decrypt(result_1, result_pt);
+  std::cout << "Result: " << result_pt.to_string() << std::endl;
 }
 
 
@@ -196,35 +218,34 @@ void test_pir() {
   PirParams pir_params(DB_SZ, FST_DIM_SZ, NUM_ENTRIES, GSW_L,
                        GSW_L_KEY, PT_MOD_WIDTH, CT_MODS);
   pir_params.print_values();
-  DEBUG_PRINT("1");
-  PirParams pir_params_ = pir_params;
-  DEBUG_PRINT("2");
-  auto context = pir_params.get_seal_params();
-  DEBUG_PRINT("3");
-  seal::Evaluator evaluator(context);
+  seal::Evaluator evaluator((seal::SEALContext(pir_params.get_seal_params())));
   DEBUG_PRINT("4");
   PirServer server(pir_params); // Initialize the server with the parameters
 
-  std::cout << "Initializing server..." << std::endl;
+  BENCH_PRINT("Initializing server...");
   // Data to be stored in the database.
   std::vector<Entry> data = server.gen_data();
-
-  // DEBUG_PRINT("Initializing client...");
+  BENCH_PRINT("Server initialized");
 
   // Run the query process many times.
+  srand(time(0)); // reset the seed for the random number generator
   for (int i = 0; i < EXPERIMENT_ITERATIONS; i++) {
-    srand(time(0)); // reset the seed for the random number generator
+    
+    // ========== OFFLINE PHASE ===========
     // Initialize the client
     PirClient client(pir_params);
     const int client_id = rand();
-    DEBUG_PRINT("Client ID: " << client_id);
 
     server.decryptor_ = client.get_decryptor();
     server.set_client_galois_key(client_id, client.create_galois_keys());
     server.set_client_gsw_key(client_id, client.generate_gsw_from_key());
 
-    // === Client start generating query ===
+    // ========== ONLINE PHASE ===========
+    // Client start generating query
     size_t entry_index = rand() % pir_params.get_num_entries();
+    BENCH_PRINT("Experiment [" << i << "]");
+    DEBUG_PRINT("\t\tClient ID:\t" << client_id);
+    DEBUG_PRINT("\t\tEntry index:\t" << entry_index);
 
     auto c_start_time = CURR_TIME;  // client start time for the query
     auto query = client.generate_query(entry_index);
@@ -238,9 +259,9 @@ void test_pir() {
     Entry entry = client.get_entry_from_plaintext(entry_index, decrypted_result[0]);
     auto c_end_time = CURR_TIME;
     
-    std::cout << "Experiment [" << i << "]\tServer time: " << TIME_DIFF(s_start_time, s_end_time) << " ms" << std::endl;
-    std::cout << "\t\tClient Time: " << TIME_DIFF(c_start_time, c_end_time) - TIME_DIFF(s_start_time, s_end_time) << " ms" << std::endl;
-    std::cout << "Noise budget left: " << client.get_decryptor()->invariant_noise_budget(result[0]) << std::endl;
+    BENCH_PRINT("\t\tServer time:\t" << TIME_DIFF(s_start_time, s_end_time) << " ms");
+    BENCH_PRINT("\t\tClient Time:\t" << TIME_DIFF(c_start_time, c_end_time) - TIME_DIFF(s_start_time, s_end_time) << " ms"); 
+    DEBUG_PRINT("\t\tNoise budget left:\t" << client.get_decryptor()->invariant_noise_budget(result[0]));
 
     server_time_sum += TIME_DIFF(s_start_time, s_end_time);
     client_time_sum += TIME_DIFF(c_start_time, c_end_time) - TIME_DIFF(s_start_time, s_end_time);

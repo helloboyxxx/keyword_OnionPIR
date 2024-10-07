@@ -12,10 +12,7 @@
 PirServer::PirServer(const PirParams &pir_params)
     : pir_params_(pir_params), context_(pir_params.get_seal_params()),
       DBSize_(pir_params.get_DBSize()), evaluator_(context_), dims_(pir_params.get_dims()),
-      hashed_key_width_(pir_params_.get_hashed_key_width()) {
-
-        DEBUG_PRINT("Server initialized");
-}
+      hashed_key_width_(pir_params_.get_hashed_key_width()) { }
 
 // Fills the database with random data
 std::vector<Entry> PirServer::gen_data() {
@@ -87,65 +84,34 @@ CuckooInitData PirServer::gen_keyword_data(size_t max_iter, uint64_t keyword_see
   return {used_seeds, {}};
 }
 
-// Computes a dot product between the selection vector and the database for the
-// first dimension. This function is used when the modulus switching is not
-// delayed. The selection vector should be transformed to ntt.
-// this function will not function if there are missing entries in the database
-std::vector<seal::Ciphertext>
-PirServer::evaluate_first_dim(std::vector<seal::Ciphertext> &selection_vector) {
-  int size_of_other_dims = DBSize_ / dims_[0];  // number of entries in the other dimensions
-  std::vector<seal::Ciphertext> result;
-
-  for (int i = 0; i < size_of_other_dims; i++) {
-    seal::Ciphertext cipher_result;
-    evaluator_.multiply_plain(selection_vector[0], *db_[i], cipher_result); // multiply the first selection vector with the first entry in the database
-    result.push_back(cipher_result);  // store the result in the result vector
-  }
-
-  for (int i = 1; i < selection_vector.size(); i++) {
-    for (int j = 0; j < size_of_other_dims; j++) {
-      seal::Ciphertext cipher_result;
-      evaluator_.multiply_plain(selection_vector[i], *db_[i * size_of_other_dims + j],
-                                cipher_result); // multiply the ith selection vector with the ith entry in the database
-      evaluator_.add_inplace(result[j], cipher_result); // add the result to the previous result
-    }
-  }
-
-  for (auto &ct : result) {
-    evaluator_.transform_from_ntt_inplace(ct);  // transform
-  }
-
-  return result;
-}
 
 // Computes a dot product between the selection vector and the database for the
 // first dimension with a delayed modulus optimization. Selection vector should
 // be transformed to ntt.
 std::vector<seal::Ciphertext>
-PirServer::evaluate_first_dim_delayed_mod(std::vector<seal::Ciphertext> &selection_vector) {
-  int size_of_other_dims = DBSize_ / dims_[0];  // number of entries in the other dimensions
+PirServer::evaluate_first_dim(std::vector<seal::Ciphertext> &selection_vector) {
+  const size_t fst_dim_sz = dims_[0];  // number of entries in the first dimension
+  const size_t other_dim_sz = DBSize_ / fst_dim_sz;  // number of entries in the other dimensions
   std::vector<seal::Ciphertext> result;
-  auto seal_params = context_.get_context_data(selection_vector[0].parms_id())->parms();
-  // auto seal_params =  context_.key_context_data()->parms();
-  auto coeff_modulus = seal_params.coeff_modulus();
-  size_t coeff_count = seal_params.poly_modulus_degree();
-  size_t coeff_mod_count = coeff_modulus.size();
-  size_t encrypted_ntt_size = selection_vector[0].size();
+  const auto seal_params = context_.get_context_data(selection_vector[0].parms_id())->parms();
+  const auto coeff_modulus = seal_params.coeff_modulus();
+  const size_t coeff_count = seal_params.poly_modulus_degree();
+  const size_t coeff_mod_count = coeff_modulus.size();
+  const size_t encrypted_ntt_size = selection_vector[0].size();
   seal::Ciphertext ct_acc;
 
-  for (int i = 0; i < dims_[0]; i++) {
+  for (size_t i = 0; i < fst_dim_sz; i++) {
     evaluator_.transform_to_ntt_inplace(selection_vector[i]); // transform the selection vector to ntt
   }
 
-  for (int col_id = 0; col_id < size_of_other_dims; ++col_id) {
+  for (size_t col = 0; col < other_dim_sz; ++col) {
     std::vector<std::vector<uint128_t>> buffer(
         encrypted_ntt_size, std::vector<uint128_t>(coeff_count * coeff_mod_count, 0));
-    for (int i = 0; i < dims_[0]; i++) {
-      // std::cout << "i: " << i << std::endl;
+    for (size_t i = 0; i < fst_dim_sz; i++) {
       for (size_t poly_id = 0; poly_id < encrypted_ntt_size; poly_id++) {
-        if (db_[col_id + i * size_of_other_dims].has_value()) { // if the entry is not empty
+        if (db_[col + i * other_dim_sz].has_value()) { // if the entry is not empty
           utils::multiply_poly_acum(selection_vector[i].data(poly_id),
-                                    (*db_[col_id + i * size_of_other_dims]).data(),
+                                    (*db_[col + i * other_dim_sz]).data(),
                                     coeff_count * coeff_mod_count, buffer[poly_id].data()); 
         }
       }
@@ -196,7 +162,7 @@ std::vector<seal::Ciphertext> PirServer::evaluate_gsw_product(std::vector<seal::
   }
 
   for (int j = 0; j < block_size; j++) {
-    data_gsw.cyphertext_inverse_ntt(result_vector[j]);
+    data_gsw.ciphertext_inverse_ntt(result_vector[j]);
     evaluator_.add_inplace(result_vector[j], result[j]);  // 
   }
   return result_vector;
@@ -262,25 +228,16 @@ Entry generate_entry(int id, size_t entry_size) {
   // rand() is not recommended for serious random-number generation needs. Therefore we need this mt19937.
   // Other methods are recommended in: 
 
-  // std::mt19937_64 rng(id); 
-  // for (int i = 0; i < entry_size; i++) {
-  //   entry.push_back(rng() % 256); // 256 is the maximum value of a byte
-  // }
-
-  // TODO: Remove this temp test.
-  for (uint64_t i = 0; i < entry_size; i++) {
-    entry.push_back(i % 256); // 256 is the maximum value of a byte
+  if (id < 0) {
+    std::mt19937_64 rng(id); 
+    for (int i = 0; i < entry_size; i++) {
+      entry.push_back(rng() % 256); // 256 is the maximum value of a byte
+    }
+  } else {
+    for (int i = 0; i < entry_size; i++) {
+      entry.push_back(1); // 256 is the maximum value of a byte
+    }
   }
-
-  // sample entry print. Should look like: 
-  // 254, 109, 126, 66, 220, 98, 230, 17, 83, 106, 123,
-  /*
-  if (id == 100) {
-    DEBUG_PRINT("First 10 bytes of the " + std::to_string(id) + "th entry: ");
-    print_entry(entry);
-    DEBUG_PRINT("Entry size: " << entry.size());  
-  }
-  */
   return entry;
 }
 
@@ -388,7 +345,7 @@ std::vector<seal::Ciphertext> PirServer::make_query(uint32_t client_id, PirQuery
   // ========================== Evaluations ==========================
   // Evaluate the first dimension
   auto first_dim_start = CURR_TIME;
-  std::vector<seal::Ciphertext> result = evaluate_first_dim_delayed_mod(query_vector);
+  std::vector<seal::Ciphertext> result = evaluate_first_dim(query_vector);
   auto first_dim_end = CURR_TIME;
 
   // Evaluate the other dimensions
@@ -404,10 +361,10 @@ std::vector<seal::Ciphertext> PirServer::make_query(uint32_t client_id, PirQuery
   evaluator_.mod_switch_to_next_inplace(result[0]); // result.size() == 1.
 
   // ========================== Timing ==========================
-  BENCH_PRINT("Expand time: " << TIME_DIFF(expand_start, expand_end) << "ms");
-  BENCH_PRINT("Convert time: " << TIME_DIFF(convert_start, convert_end) << "ms");
-  BENCH_PRINT("First dim time: " << TIME_DIFF(first_dim_start, first_dim_end) << "ms");
-  BENCH_PRINT("Other dim time: " << TIME_DIFF(other_dim_start, other_dim_end) << "ms");
+  BENCH_PRINT("\t\tExpand time:\t" << TIME_DIFF(expand_start, expand_end) << "ms");
+  BENCH_PRINT("\t\tConvert time:\t" << TIME_DIFF(convert_start, convert_end) << "ms");
+  BENCH_PRINT("\t\tFirst dim time:\t" << TIME_DIFF(first_dim_start, first_dim_end) << "ms");
+  BENCH_PRINT("\t\tOther dim time:\t" << TIME_DIFF(other_dim_start, other_dim_end) << "ms");
 
   return result;
 }

@@ -67,7 +67,7 @@ PirQuery PirClient::generate_query(std::uint64_t entry_index) {
   // Get the corresponding index of the plaintext in the database
   size_t plaintext_index = get_database_plain_index(entry_index);
   std::vector<size_t> query_indices = get_query_indices(plaintext_index);
-  PRINT_INT_ARRAY("query_indices", query_indices.data(), query_indices.size());
+  PRINT_INT_ARRAY("\t\tquery_indices", query_indices.data(), query_indices.size());
   uint64_t coeff_count = params_.poly_modulus_degree(); // 4096
 
   // The number of bits required for the first dimension is equal to the size of the first dimension
