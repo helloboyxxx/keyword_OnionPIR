@@ -6,8 +6,8 @@
 #define GSW_L             5             // Parameter for GSW scheme. 
 #define GSW_L_KEY         15            // GSW for query expansion
 #define FST_DIM_SZ        256           // Number of dimensions of the hypercube
-#define PT_MOD_WIDTH      25            // Width of the plain modulus 
-#define CT_MODS      {62, 62, 62}  // Coeff modulus for the BFV scheme
+#define PT_MOD_WIDTH      48            // Width of the plain modulus 
+#define CT_MODS      {60, 60, 60}  // Coeff modulus for the BFV scheme
 
 
 #define EXPERIMENT_ITER 1
@@ -18,7 +18,7 @@ const size_t entry_idx = 1; // fixed index for testing
 void run_query_test() {
   PirTest test;
   // test.gen_and_expand();
-  // test.enc_then_add();
+  test.enc_then_add();
   // test.noise_budget_test();
 }
 
@@ -130,7 +130,6 @@ void PirTest::enc_then_add() {
 
   // auto to_add = mod_diff * 4096 * 256;
   __uint128_t delta = mod_mult / plain_modulus;
-  // __uint128_t delta = 1ULL << 48;
   __uint128_t message = 15;
   __uint128_t to_add = delta * message;
   DEBUG_PRINT("delta:    \t" << uint128_to_string(delta));

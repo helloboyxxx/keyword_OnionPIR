@@ -35,7 +35,8 @@ void run_tests() {
   // If we compare the following two examples, we do see that external product increase the noise much slower than BFV x BFV.
   // bfv_example();
   // test_external_product();
-  test_ct_sub();
+  // test_ct_sub();
+  serialization_example();
 
   // test_pir();
   // find_pt_mod_width();
@@ -204,6 +205,86 @@ void test_ct_sub() {
   seal::Plaintext result_pt;
   decryptor_->decrypt(result_1, result_pt);
   std::cout << "Result: " << result_pt.to_string() << std::endl;
+}
+
+
+void serialization_example() {
+  PirParams pir_params(DB_SZ, FST_DIM_SZ, NUM_ENTRIES, GSW_L, GSW_L_KEY, PT_MOD_WIDTH, CT_MODS);
+  const auto params = pir_params.get_seal_params();
+  const auto context_ = seal::SEALContext(params);
+  const auto evaluator_ = seal::Evaluator(context_);
+  const auto keygen_ = seal::KeyGenerator(context_);
+  const auto secret_key_ = keygen_.secret_key();
+  const auto encryptor_ = new seal::Encryptor(context_, secret_key_);
+  const auto decryptor_ = new seal::Decryptor(context_, secret_key_);
+
+  std::stringstream data_stream;
+
+  // ================== Raw Zero ciphertext ==================
+  seal::Ciphertext raw_zero;
+  encryptor_->encrypt_zero_symmetric(raw_zero);
+  auto raw_size = raw_zero.save(data_stream); // store the raw zero in the stream
+
+  // ================== SEAL original method for creating serialized zero ==================
+  // Original method for creating a serializable object
+  Serializable<Ciphertext> orig_serialized_zero = encryptor_->encrypt_zero_symmetric();
+  auto s_size = orig_serialized_zero.save(data_stream);   // ! Storing the original zero
+
+  // ================== New way to create a ciphertext with a seed ==================
+  // New way to create a ciphertext with a seed, do some operations and then convert it to a serializable object.
+  seal::Ciphertext new_seeded_zero;
+  encryptor_->encrypt_zero_symmetric_seeded(new_seeded_zero); // This function allows us to change the ciphertext.data(0).
+
+  // Add something in the third coeeficient of seeded_zero
+  DEBUG_PRINT("Size: " << new_seeded_zero.size());
+  auto ptr_0 = new_seeded_zero.data(0);
+  auto ptr_1 = new_seeded_zero.data(1); // corresponds to the second polynomial (c_1)
+  // print the binary value of the first coefficient
+  BENCH_PRINT("Indicator:\t" << std::bitset<64>(ptr_1[0]));  // used in has_seed_marker()
+  // the seed is stored in here. By the time I write this code, it takes 81
+  // bytes to store the prng seed. Notice that they have common headers.
+  BENCH_PRINT("Seed: \t\t" << std::bitset<64>(ptr_1[1]));
+  BENCH_PRINT("Seed: \t\t" << std::bitset<64>(ptr_1[2]));
+  BENCH_PRINT("Seed: \t\t" << std::bitset<64>(ptr_1[3]));
+  BENCH_PRINT("Seed: \t\t" << std::bitset<64>(ptr_1[4]));
+  BENCH_PRINT("Seed: \t\t" << std::bitset<64>(ptr_1[5]));
+  
+  auto mods = context_.first_context_data()->parms().coeff_modulus();
+  auto plain_modulus = params.plain_modulus().value();
+  __uint128_t mod_0 = mods[0].value();
+  __uint128_t mod_1 = mods[1].value();
+  __uint128_t delta = mod_0 * mod_1 / plain_modulus;
+  __uint128_t message = 15;
+  __uint128_t to_add = delta * message;
+  auto padding = params.poly_modulus_degree();
+  ptr_0[0] = (ptr_0[0] + (to_add % mod_0)) % mod_0;
+  ptr_0[0 + padding] = (ptr_0[0 + padding] + (to_add % mod_1)) % mod_1;
+
+  // Convert seeded_zero to Serializable<Ciphertext>
+  auto new_serialized_zero = encryptor_->ciphertext_to_serializable(new_seeded_zero);
+  // write the serializable object to the stream
+  auto s2_size = new_serialized_zero.save(data_stream); // ! Storing new ciphertext with a seed
+
+  // ================== Deserialize and decrypt the ciphertexts ==================
+  seal::Ciphertext raw_ct, orig_ct, new_ct;
+  raw_ct.load(context_, data_stream);  // ! loading the raw zero
+  orig_ct.load(context_, data_stream);  // ! loading the original zero
+  new_ct.load(context_, data_stream); // ! loading the new ciphertext with a seed 
+
+  // decrypt the ciphertexts
+  seal::Plaintext raw_pt, orig_pt, new_pt;
+  decryptor_->decrypt(raw_ct, raw_pt);
+  decryptor_->decrypt(orig_ct, orig_pt);
+  decryptor_->decrypt(new_ct, new_pt);
+
+  // ================== Print the results ==================
+  BENCH_PRINT("Raw zero size: " << raw_size);
+  BENCH_PRINT("Serializable size 1: " << s_size);
+  BENCH_PRINT("Serializable size 2: " << s2_size); // smaller size, but allow us to work on the ciphertext!
+
+  BENCH_PRINT("Raw plaintext: " << raw_pt.to_string());
+  BENCH_PRINT("Original plaintext: " << orig_pt.to_string());
+  BENCH_PRINT("New plaintext: " << new_pt.to_string()); // Hopefully, this decrypts to the message.
 }
 
 

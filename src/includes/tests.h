@@ -1,8 +1,12 @@
 #pragma once
 
 void run_tests();
+
+// BFV & GSW tests
+
 void bfv_example();
 void test_ct_sub();
+void serialization_example();
 
 void test_external_product();
 void test_keyword_pir();
