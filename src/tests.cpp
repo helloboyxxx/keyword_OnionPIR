@@ -9,15 +9,15 @@
 #include <random>
 
 // "Default" Parameters for the PIR scheme
-#define DB_SZ             1 << 10       // Database size <==> Number of plaintexts in the database
-#define NUM_ENTRIES       1 << 10       // Number of entries in the database
+#define DB_SZ             1 << 15       // Database size <==> Number of plaintexts in the database
+#define NUM_ENTRIES       1 << 14       // Number of entries in the database, can be less than DB_SZ
 #define GSW_L             5             // Parameter for GSW scheme. 
 #define GSW_L_KEY         15            // GSW for query expansion
 #define FST_DIM_SZ        256           // Number of dimensions of the hypercube
 #define PT_MOD_WIDTH      48            // Width of the plain modulus 
 #define CT_MODS	         {60, 60, 60}  // Coeff modulus for the BFV scheme
 
-#define EXPERIMENT_ITERATIONS 1
+#define EXPERIMENT_ITERATIONS 10
 
 void print_func_name(std::string func_name) {
 #ifdef _DEBUG
@@ -340,7 +340,7 @@ void test_pir() {
     
     BENCH_PRINT("\t\tServer time:\t" << TIME_DIFF(s_start_time, s_end_time) << " ms");
     BENCH_PRINT("\t\tClient Time:\t" << TIME_DIFF(c_start_time, c_end_time) - TIME_DIFF(s_start_time, s_end_time) << " ms"); 
-    DEBUG_PRINT("\t\tNoise budget left:\t" << client.get_decryptor()->invariant_noise_budget(result[0]));
+    DEBUG_PRINT("\t\tNoise budget:\t" << client.get_decryptor()->invariant_noise_budget(result[0]));
 
     server_time_sum += TIME_DIFF(s_start_time, s_end_time);
     client_time_sum += TIME_DIFF(c_start_time, c_end_time) - TIME_DIFF(s_start_time, s_end_time);
@@ -395,16 +395,20 @@ void test_seeded_pir() {
     // Prepare data stream for the client
     std::stringstream data_stream;
 
-    // ============= ONLINE PHASE ===============
+    // ===================== ONLINE PHASE =====================
     // Client start generating query
     size_t entry_index = rand() % pir_params.get_num_entries();
     BENCH_PRINT("Experiment [" << i << "]");
     DEBUG_PRINT("\t\tClient ID:\t" << client_id);
     DEBUG_PRINT("\t\tEntry index:\t" << entry_index);
 
+    // ============= CLIENT ===============
     auto c_start_time = CURR_TIME;  // client start time for the query
-    client.generate_seeded_query(entry_index, data_stream);
-    
+    PirQuery query = client.generate_query(entry_index, true);
+    auto query_size = query.save(data_stream);  // save the query to the data stream
+
+
+    // ============= SERVER ===============
     auto s_start_time = CURR_TIME;  // server start time for processing the query
     auto result = server.make_seeded_query(client_id, data_stream);
     auto s_end_time = CURR_TIME;
@@ -414,9 +418,10 @@ void test_seeded_pir() {
     Entry entry = client.get_entry_from_plaintext(entry_index, decrypted_result[0]);
     auto c_end_time = CURR_TIME;
     
+    DEBUG_PRINT("\t\tQuery size:\t" << query_size);
     BENCH_PRINT("\t\tServer time:\t" << TIME_DIFF(s_start_time, s_end_time) << " ms");
     BENCH_PRINT("\t\tClient Time:\t" << TIME_DIFF(c_start_time, c_end_time) - TIME_DIFF(s_start_time, s_end_time) << " ms"); 
-    DEBUG_PRINT("\t\tNoise budget left:\t" << client.get_decryptor()->invariant_noise_budget(result[0]));
+    DEBUG_PRINT("\t\tNoise budget:\t" << client.get_decryptor()->invariant_noise_budget(result[0]));
 
     server_time_sum += TIME_DIFF(s_start_time, s_end_time);
     client_time_sum += TIME_DIFF(c_start_time, c_end_time) - TIME_DIFF(s_start_time, s_end_time);

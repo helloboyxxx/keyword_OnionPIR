@@ -14,6 +14,39 @@ PirServer::PirServer(const PirParams &pir_params)
       DBSize_(pir_params.get_DBSize()), evaluator_(context_), dims_(pir_params.get_dims()),
       hashed_key_width_(pir_params_.get_hashed_key_width()) { }
 
+
+
+Entry generate_entry(int id, size_t entry_size) {
+  Entry entry;
+  entry.reserve(entry_size); // reserving enough space will help reduce the number of reallocations.
+  // rng here is a pseudo-random number generator: https://en.cppreference.com/w/cpp/numeric/random/mersenne_twister_engine
+  // According to the notes in: https://en.cppreference.com/w/cpp/numeric/random/rand, 
+  // rand() is not recommended for serious random-number generation needs. Therefore we need this mt19937.
+  // Other methods are recommended in: 
+  std::mt19937_64 rng(id); 
+  for (int i = 0; i < entry_size; i++) {
+    entry.push_back(rng() % 256); // 256 is the maximum value of a byte
+  }
+  return entry;
+}
+
+
+Entry generate_entry_with_id(uint64_t key_id, size_t entry_size, size_t hashed_key_width) {
+  if (entry_size < hashed_key_width) {
+    throw std::invalid_argument("Entry size is too small for the hashed key width");
+  }
+
+  Entry entry;
+  entry.reserve(entry_size);
+  std::mt19937_64 rng(key_id);
+  // generate the entire entry using random numbers for simplicity.
+  for (int i = 0; i < entry_size; i++) {
+    entry.push_back(rng() % 256);
+  }
+  return entry;
+}
+
+
 // Fills the database with random data
 std::vector<Entry> PirServer::gen_data() {
   std::vector<Entry> data;
@@ -217,44 +250,6 @@ void PirServer::set_client_galois_key(uint32_t client_id, seal::GaloisKeys clien
 
 void PirServer::set_client_gsw_key(uint32_t client_id, GSWCiphertext &&gsw_key) {
   client_gsw_keys_[client_id] = gsw_key;
-}
-
-
-Entry generate_entry(int id, size_t entry_size) {
-  Entry entry;
-  entry.reserve(entry_size); // reserving enough space will help reduce the number of reallocations.
-  // rng here is a pseudo-random number generator: https://en.cppreference.com/w/cpp/numeric/random/mersenne_twister_engine
-  // According to the notes in: https://en.cppreference.com/w/cpp/numeric/random/rand, 
-  // rand() is not recommended for serious random-number generation needs. Therefore we need this mt19937.
-  // Other methods are recommended in: 
-
-  if (id < 0) {
-    std::mt19937_64 rng(id); 
-    for (int i = 0; i < entry_size; i++) {
-      entry.push_back(rng() % 256); // 256 is the maximum value of a byte
-    }
-  } else {
-    for (int i = 0; i < entry_size; i++) {
-      entry.push_back(1); // 256 is the maximum value of a byte
-    }
-  }
-  return entry;
-}
-
-
-Entry generate_entry_with_id(uint64_t key_id, size_t entry_size, size_t hashed_key_width) {
-  if (entry_size < hashed_key_width) {
-    throw std::invalid_argument("Entry size is too small for the hashed key width");
-  }
-
-  Entry entry;
-  entry.reserve(entry_size);
-  std::mt19937_64 rng(key_id);
-  // generate the entire entry using random numbers for simplicity.
-  for (int i = 0; i < entry_size; i++) {
-    entry.push_back(rng() % 256);
-  }
-  return entry;
 }
 
 std::vector<Key> cuckoo_insert(uint64_t seed1, uint64_t seed2, size_t swap_limit,
