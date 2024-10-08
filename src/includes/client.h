@@ -25,6 +25,8 @@ public:
   */
   PirQuery generate_query(const std::uint64_t entry_index, const bool use_seed = true);
 
+  size_t write_query_to_stream(PirQuery &query, std::stringstream &data_stream);
+
   std::vector<PirQuery> generate_cuckoo_query(uint64_t seed1, uint64_t seed2, uint64_t table_size, Key keyword);
 
   void cuckoo_process_reply(uint64_t seed1, uint64_t seed2, uint64_t table_size, Key keyword, std::vector<seal::Ciphertext> reply1, std::vector<seal::Ciphertext> reply2);

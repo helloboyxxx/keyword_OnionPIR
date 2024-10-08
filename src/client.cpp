@@ -140,6 +140,11 @@ PirQuery PirClient::generate_query(const std::uint64_t entry_index, const bool u
   return query;
 }
 
+size_t PirClient::write_query_to_stream(PirQuery &query, std::stringstream &data_stream) {
+  return query.save(data_stream);
+}
+
+
 /**
  * @brief Generate two queries in cuckoo hashing 
  * 

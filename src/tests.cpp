@@ -327,7 +327,7 @@ void test_pir() {
     DEBUG_PRINT("\t\tEntry index:\t" << entry_index);
 
     auto c_start_time = CURR_TIME;  // client start time for the query
-    auto query = client.generate_query(entry_index);
+    auto query = client.generate_query(entry_index, false);
     
     auto s_start_time = CURR_TIME;  // server start time for processing the query
     auto result = server.make_query(client_id, std::move(query));
@@ -405,9 +405,8 @@ void test_seeded_pir() {
     // ============= CLIENT ===============
     auto c_start_time = CURR_TIME;  // client start time for the query
     PirQuery query = client.generate_query(entry_index, true);
-    auto query_size = query.save(data_stream);  // save the query to the data stream
-
-
+    auto query_size = client.write_query_to_stream(query, data_stream);
+    
     // ============= SERVER ===============
     auto s_start_time = CURR_TIME;  // server start time for processing the query
     auto result = server.make_seeded_query(client_id, data_stream);
