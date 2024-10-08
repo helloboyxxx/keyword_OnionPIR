@@ -15,7 +15,14 @@ public:
      2. Creates a plain_query (pt in paper), add the first dimension, then encrypts it.
      3. For the rest dimensions, calculate required RGSW coefficients and insert them into the ciphertext. Result is $\tilde c$ in paper.
   */
-  PirQuery generate_query(std::uint64_t entry_index);
+  PirQuery generate_query(const std::uint64_t entry_index);
+
+  /**
+  Almost the same as generate_query, but it writes the serialized data to the
+  given data_stream, which can be accessed by the server for deserialization
+  and reconstruct the query.
+  */
+  void generate_seeded_query(const std::uint64_t entry_index, std::stringstream &data_stream);
 
   std::vector<PirQuery> generate_cuckoo_query(uint64_t seed1, uint64_t seed2, uint64_t table_size, Key keyword);
 

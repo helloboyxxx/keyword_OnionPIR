@@ -62,7 +62,7 @@ std::vector<size_t> PirClient::get_query_indices(size_t plaintext_index) {
   return query_indices;
 }
 
-PirQuery PirClient::generate_query(std::uint64_t entry_index) {
+PirQuery PirClient::generate_query(const std::uint64_t entry_index) {
 
   // Get the corresponding index of the plaintext in the database
   size_t plaintext_index = get_database_plain_index(entry_index);
@@ -133,6 +133,81 @@ PirQuery PirClient::generate_query(std::uint64_t entry_index) {
   }
 
   return query;
+}
+
+void PirClient::generate_seeded_query(const std::uint64_t entry_index,
+                                      std::stringstream &data_stream) {
+  // Get the corresponding index of the plaintext in the database
+  size_t plaintext_index = get_database_plain_index(entry_index);
+  std::vector<size_t> query_indices = get_query_indices(plaintext_index);
+  PRINT_INT_ARRAY("\t\tquery_indices", query_indices.data(), query_indices.size());
+  uint64_t coeff_count = params_.poly_modulus_degree(); // 4096
+
+  // The number of bits required for the first dimension is equal to the size of the first dimension
+  uint64_t msg_size = dims_[0] + pir_params_.get_l() * (dims_.size() - 1);
+  uint64_t bits_per_ciphertext = 1; // padding msg_size to the next power of 2
+
+  while (bits_per_ciphertext < msg_size)
+    bits_per_ciphertext *= 2;
+
+  seal::Plaintext plain_query(coeff_count); // we allow 4096 coefficients in the plaintext polynomial to be set as suggested in the paper.
+
+  // Algorithm 1 from the OnionPIR Paper
+  // We set the corresponding coefficient to the inverse so the value of the
+  // expanded ciphertext will be 1
+  uint64_t inverse = 0;
+  uint64_t plain_modulus = params_.plain_modulus().value(); // example: 16777259
+  seal::util::try_invert_uint_mod(bits_per_ciphertext, plain_modulus, inverse);
+
+  // Add the first dimension query vector to the query
+  plain_query[ query_indices[0] ] = inverse;
+  
+  // Encrypt plain_query first. Later we will insert the rest.
+  Ciphertext query; // pt in paper
+  encryptor_->encrypt_symmetric_seeded(plain_query, query);  // $\tilde c$ in paper
+
+  auto l = pir_params_.get_l();
+  auto base_log2 = pir_params_.get_base_log2();
+  auto context_data = context_->first_context_data();
+  auto coeff_modulus = context_data->parms().coeff_modulus();
+  auto coeff_mod_count = coeff_modulus.size();  // 2 here, not 3. Notice that here we use the first context_data, not all of coeff_modulus are used.
+
+  // The following two for-loops calculates the powers for GSW gadgets.
+  __uint128_t inv[coeff_mod_count];
+  for (int k = 0; k < coeff_mod_count; k++) {
+    uint64_t result;
+    seal::util::try_invert_uint_mod(bits_per_ciphertext, coeff_modulus[k], result);
+    inv[k] = result;
+  }
+
+  // coeff_mod_count many rows, each row is B^{l-1},, ..., B^0 under different moduli
+  std::vector<std::vector<__uint128_t>> gadget = gsw_gadget(l, base_log2, coeff_mod_count, coeff_modulus);
+
+  // This for-loop corresponds to the for-loop in Algorithm 1 from the OnionPIR paper
+  int filled_cnt = dims_[0];  // we have already filled these many coefficients
+  for (int i = 1; i < query_indices.size(); i++) {  // dimensions
+    // we use this if statement to replce the j for loop in Algorithm 1. This is because N_i = 2 for all i > 0
+    // When 0 is requested, we use initial encrypted value of PirQuery query, where the coefficients decrypts to 0. 
+    // When 1 is requested, we add special values to the coefficients of the query so that they decrypts to correct GSW(1) values.
+    if (query_indices[i] == 1) {
+      // ! pt is a ct_coeff_type *. It points to the current position to be written.
+      auto ptr = query.data(0) + filled_cnt;  // points to the current collection of coefficients to be written
+      for (int k = 0; k < l; k++) {
+        for (int mod_id = 0; mod_id < coeff_mod_count; mod_id++) {
+          auto pad = mod_id * coeff_count;   // We use two moduli for the same gadget value. They are apart by coeff_count.
+          __uint128_t mod = coeff_modulus[mod_id].value();
+          // the coeff is (B^{l-1}, ..., B^0) / bits_per_ciphertext
+          auto coef = gadget[mod_id][k] * inv[mod_id] % mod;
+          ptr[k + pad] = (ptr[k + pad] + coef) % mod;
+        }
+      }
+    }
+    filled_cnt += l;
+  }
+
+  // ================== Serialize the query ==================
+  auto query_size = query.save(data_stream);
+  DEBUG_PRINT("\t\tQuery size: " << query_size);
 }
 
 /**

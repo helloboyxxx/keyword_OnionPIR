@@ -36,9 +36,10 @@ void run_tests() {
   // bfv_example();
   // test_external_product();
   // test_ct_sub();
-  serialization_example();
+  // serialization_example();
 
   // test_pir();
+  test_seeded_pir();
   // find_pt_mod_width();
   // find_best_params();
   // test_keyword_pir(); // two server version
@@ -291,7 +292,6 @@ void serialization_example() {
 // Testing Onion PIR scheme 
 void test_pir() {
   print_func_name(__FUNCTION__);
-
   auto server_time_sum = 0;
   auto client_time_sum = 0;
   
@@ -299,8 +299,6 @@ void test_pir() {
   PirParams pir_params(DB_SZ, FST_DIM_SZ, NUM_ENTRIES, GSW_L,
                        GSW_L_KEY, PT_MOD_WIDTH, CT_MODS);
   pir_params.print_values();
-  seal::Evaluator evaluator((seal::SEALContext(pir_params.get_seal_params())));
-  DEBUG_PRINT("4");
   PirServer server(pir_params); // Initialize the server with the parameters
 
   BENCH_PRINT("Initializing server...");
@@ -364,6 +362,85 @@ void test_pir() {
   std::cout << "Average server time: " << server_time_sum / EXPERIMENT_ITERATIONS << " ms" << std::endl;
   std::cout << "Average client time: " << client_time_sum / EXPERIMENT_ITERATIONS << " ms" << std::endl;
 }
+
+void test_seeded_pir() {
+  print_func_name(__FUNCTION__);
+  auto server_time_sum = 0;
+  auto client_time_sum = 0;
+  
+  // ============== setting parameters for PIR scheme ==============
+  PirParams pir_params(DB_SZ, FST_DIM_SZ, NUM_ENTRIES, GSW_L,
+                       GSW_L_KEY, PT_MOD_WIDTH, CT_MODS);
+  pir_params.print_values();
+  PirServer server(pir_params); // Initialize the server with the parameters
+
+  BENCH_PRINT("Initializing server...");
+  // Data to be stored in the database.
+  std::vector<Entry> data = server.gen_data();
+  BENCH_PRINT("Server initialized");
+
+  // Run the query process many times.
+  srand(time(0)); // reset the seed for the random number generator
+  for (int i = 0; i < EXPERIMENT_ITERATIONS; i++) {
+    
+    // ============= OFFLINE PHASE ==============
+    // Initialize the client
+    PirClient client(pir_params);
+    const int client_id = rand();
+
+    server.decryptor_ = client.get_decryptor();
+    server.set_client_galois_key(client_id, client.create_galois_keys());
+    server.set_client_gsw_key(client_id, client.generate_gsw_from_key());
+
+    // Prepare data stream for the client
+    std::stringstream data_stream;
+
+    // ============= ONLINE PHASE ===============
+    // Client start generating query
+    size_t entry_index = rand() % pir_params.get_num_entries();
+    BENCH_PRINT("Experiment [" << i << "]");
+    DEBUG_PRINT("\t\tClient ID:\t" << client_id);
+    DEBUG_PRINT("\t\tEntry index:\t" << entry_index);
+
+    auto c_start_time = CURR_TIME;  // client start time for the query
+    client.generate_seeded_query(entry_index, data_stream);
+    
+    auto s_start_time = CURR_TIME;  // server start time for processing the query
+    auto result = server.make_seeded_query(client_id, data_stream);
+    auto s_end_time = CURR_TIME;
+    
+    // client gets result from the server and decrypts it
+    auto decrypted_result = client.decrypt_result(result);
+    Entry entry = client.get_entry_from_plaintext(entry_index, decrypted_result[0]);
+    auto c_end_time = CURR_TIME;
+    
+    BENCH_PRINT("\t\tServer time:\t" << TIME_DIFF(s_start_time, s_end_time) << " ms");
+    BENCH_PRINT("\t\tClient Time:\t" << TIME_DIFF(c_start_time, c_end_time) - TIME_DIFF(s_start_time, s_end_time) << " ms"); 
+    DEBUG_PRINT("\t\tNoise budget left:\t" << client.get_decryptor()->invariant_noise_budget(result[0]));
+
+    server_time_sum += TIME_DIFF(s_start_time, s_end_time);
+    client_time_sum += TIME_DIFF(c_start_time, c_end_time) - TIME_DIFF(s_start_time, s_end_time);
+    if (entry == data[entry_index]) {
+      // print a green success message
+      std::cout << "\033[1;32mSuccess!\033[0m" << std::endl;
+    } else {
+      // print a red failure message
+      std::cout << "\033[1;31mFailure!\033[0m" << std::endl;
+
+      std::cout << "Result:\t";
+      print_entry(entry);
+      std::cout << "Data:\t";
+      print_entry(data[entry_index]);
+    }
+    PRINT_BAR;
+  }
+
+  std::cout << "Average server time: " << server_time_sum / EXPERIMENT_ITERATIONS << " ms" << std::endl;
+  std::cout << "Average client time: " << client_time_sum / EXPERIMENT_ITERATIONS << " ms" << std::endl;
+}
+
+
+
 
 void test_keyword_pir() {
   print_func_name(__FUNCTION__);

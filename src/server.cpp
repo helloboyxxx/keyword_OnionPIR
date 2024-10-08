@@ -317,10 +317,9 @@ std::vector<Key> cuckoo_insert(uint64_t seed1, uint64_t seed2, size_t swap_limit
   return two_tables;
 }
 
-std::vector<seal::Ciphertext> PirServer::make_query(uint32_t client_id, PirQuery &&query) {
+std::vector<seal::Ciphertext> PirServer::make_query(const uint32_t client_id, PirQuery &&query) {
 
   // ========================== Expansion & conversion ==========================
-
   // Query expansion
   auto expand_start = CURR_TIME;
   std::vector<seal::Ciphertext> query_vector = expand_query(client_id, query);
@@ -369,6 +368,13 @@ std::vector<seal::Ciphertext> PirServer::make_query(uint32_t client_id, PirQuery
   return result;
 }
 
+
+std::vector<seal::Ciphertext> PirServer::make_seeded_query(const uint32_t client_id, std::stringstream &data_stream) {
+  // Deserialize the query
+  PirQuery query;
+  query.load(context_, data_stream);
+  return make_query(client_id, std::move(query));
+}
 
 void PirServer::set_database(std::vector<Entry> &new_db) {
   // Flattens data into vector of u8s and pads each entry with 0s to entry_size number of bytes.

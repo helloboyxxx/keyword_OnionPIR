@@ -39,7 +39,10 @@ public:
   std::vector<uint64_t> get_dims() const;
 
   // Given the client id and a packed client query, this function first unpacks the query, then returns the retrieved encrypted result.
-  std::vector<seal::Ciphertext> make_query(uint32_t client_id, PirQuery &&query);
+  std::vector<seal::Ciphertext> make_query(const uint32_t client_id, PirQuery &&query);
+
+  // similar to make_query, but accepts a stringstream as input instead of the huge PirQuery object.
+  std::vector<seal::Ciphertext> make_seeded_query(const uint32_t client_id, std::stringstream &data_stream);
 
   /**
    * @brief A clever way to evaluate the external product for second to last dimensions. 
