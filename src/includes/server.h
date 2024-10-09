@@ -44,6 +44,9 @@ public:
   // similar to make_query, but accepts a stringstream as input instead of the huge PirQuery object.
   std::vector<seal::Ciphertext> make_seeded_query(const uint32_t client_id, std::stringstream &data_stream);
 
+
+  void load_gsw(std::stringstream &stream, GSWCiphertext &gsw);
+
   /**
    * @brief A clever way to evaluate the external product for second to last dimensions. 
    * 

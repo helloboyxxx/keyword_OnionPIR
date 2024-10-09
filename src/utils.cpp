@@ -63,10 +63,10 @@ std::string uint128_to_string(__uint128_t value) {
 
 
 
-std::vector<std::vector<__uint128_t>> gsw_gadget(size_t l, uint64_t base_log2, size_t coeff_mod_count,
+std::vector<std::vector<uint64_t>> gsw_gadget(size_t l, uint64_t base_log2, size_t coeff_mod_count,
                 const std::vector<seal::Modulus> &coeff_modulus) {
   // Create RGSW gadget.
-  std::vector<std::vector<__uint128_t>> gadget(coeff_mod_count, std::vector<__uint128_t>(l));
+  std::vector<std::vector<uint64_t>> gadget(coeff_mod_count, std::vector<uint64_t>(l));
   for (int i = 0; i < coeff_mod_count; i++) {
     __uint128_t mod = coeff_modulus[i].value();
     __uint128_t pow = 1;

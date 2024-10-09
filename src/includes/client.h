@@ -25,7 +25,8 @@ public:
   */
   PirQuery generate_query(const std::uint64_t entry_index, const bool use_seed = true);
 
-  size_t write_query_to_stream(PirQuery &query, std::stringstream &data_stream);
+  size_t write_query_to_stream(const PirQuery &query, std::stringstream &data_stream);
+  size_t write_gsw_to_stream(const std::vector<Ciphertext> &gsw, std::stringstream &gsw_stream);
 
   std::vector<PirQuery> generate_cuckoo_query(uint64_t seed1, uint64_t seed2, uint64_t table_size, Key keyword);
 
@@ -41,7 +42,7 @@ public:
   */
   Entry get_entry_from_plaintext(size_t entry_index, seal::Plaintext plaintext);
 
-  GSWCiphertext generate_gsw_from_key();
+  std::vector<Ciphertext> generate_gsw_from_key(const bool use_seed=true);
 
 private:
   seal::EncryptionParameters params_;

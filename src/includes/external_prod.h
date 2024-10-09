@@ -47,21 +47,28 @@ public:
   // The input plaintext is a vector of all the coefficients. Assert that the size of this vector 
   // is equal to the number of coefficients in the Plaintext, including the zero coefficients.
   void encrypt_plain_to_gsw(std::vector<uint64_t> const &plaintext,
-                            seal::Encryptor const &encryptor, seal::Decryptor &decryptor,
-                            GSWCiphertext &output);
+                            seal::Encryptor const &encryptor,
+                            seal::SecretKey const &sk,
+                            std::vector<seal::Ciphertext> &output,
+                            const bool use_seed);
 
   /**
-   * @brief Helper function for encrypt_plain_to_gsw. This function encrypts the
-   * plaintext to a single row of the GSW ciphertext at the given "half" and the
-   * given l. half = 0 means the first half of the GSW.
-   * @param cipher The zero BFV ciphertext to be handled
-   */
-  void encrypt_plain_to_gsw_one_row(std::vector<uint64_t> const &plaintext,
-                                    seal::Ciphertext &cipher, const size_t half,
-                                    const size_t level,
-                                    const size_t coeff_count,
-                                    std::vector<seal::Modulus> const &coeff_modulus,
-                                    std::vector<std::vector<__uint128_t>> const &gadget);
+  @brief Helper function for encrypt_plain_to_gsw. This function encrypts the
+   plaintext to a single row of the GSW ciphertext at the given "half" and the
+   given l. half = 0 means the first half of the GSW.
+
+  @param plaintext
+  @param half 0 denotes the top l rows, 1 denotes the bottom l rows
+  @param level level in the given half
+  @param use_seed when true, this function will create GSW ciphertext that can
+  be serialized. Otherwise, normal RGSW ciphertext is created.
+  @return seal::Ciphertext
+  */
+  seal::Ciphertext
+  enc_plain_to_gsw_one_row(std::vector<uint64_t> const &plaintext,
+                           seal::Encryptor const &encryptor,
+                           seal::SecretKey const &sk, const size_t half,
+                           const size_t level, const bool use_seed = false);
 
   /**
    * @brief Transform the given GSWCipher text from polynomial representation to NTT representation.
@@ -70,6 +77,10 @@ public:
   void gsw_ntt_negacyclic_harvey(GSWCiphertext &gsw);
 
   void ciphertext_inverse_ntt(seal::Ciphertext &ct);
+
+
+  // helper functions
+  void sealGSWVecToGSW(GSWCiphertext &output, const std::vector<seal::Ciphertext> &gsw_vec);
 
   uint64_t l;
   uint64_t base_log2;

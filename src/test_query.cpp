@@ -24,9 +24,20 @@ void run_query_test() {
 
 std::unique_ptr<PirServer> PirTest::prepare_server(bool init_db, PirParams &pir_params, PirClient &client, const int client_id) {
   std::unique_ptr<PirServer> server = std::make_unique<PirServer>(pir_params);
+  std::stringstream gsw_stream, galois_key_stream, data_stream;
+
+  // Client create galois keys and gsw keys and writes to the stream (to the server)
+  size_t gsw_key_size = client.write_gsw_to_stream(
+      client.generate_gsw_from_key(false), gsw_stream);
+  //--------------------------------------------------------------------------------
   server->decryptor_ = client.get_decryptor();
   server->set_client_galois_key(client_id, client.create_galois_keys());
-  server->set_client_gsw_key(client_id, client.generate_gsw_from_key());
+  
+  // Server receives the gsw keys and loads them
+  GSWCiphertext gsw_key;
+  server->load_gsw(gsw_stream, gsw_key);
+  server->set_client_gsw_key(client_id, std::move(gsw_key));
+
   if (init_db) {
     server->gen_data();
   }
@@ -116,7 +127,7 @@ void PirTest::enc_then_add() {
   __uint128_t mod_mult = bigger_mod * smaller_mod;
   DEBUG_PRINT("mod_diff: " << mod_diff);
 
-  std::vector<std::vector<__uint128_t>> gadget = gsw_gadget(l, pir_params.get_base_log2(), coeff_mod_count, coeff_modulus);
+  std::vector<std::vector<uint64_t>> gadget = gsw_gadget(l, pir_params.get_base_log2(), coeff_mod_count, coeff_modulus);
 
   auto gadget_diffs = std::vector<uint64_t>(l);
   for (int i = 0; i < l; i++) {

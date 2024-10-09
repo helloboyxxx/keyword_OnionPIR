@@ -25,8 +25,8 @@ PirClient::~PirClient() {
 
 seal::Decryptor *PirClient::get_decryptor() { return decryptor_; }
 
-GSWCiphertext PirClient::generate_gsw_from_key() {
-  GSWCiphertext gsw_enc;
+std::vector<Ciphertext> PirClient::generate_gsw_from_key(const bool use_seed) {
+  std::vector<seal::Ciphertext> gsw_enc; // temporary GSW ciphertext using seal::Ciphertext
   auto sk_ = secret_key_->data();
   auto ntt_tables = context_->first_context_data()->small_ntt_tables();
   auto coeff_modulus = context_->first_context_data()->parms().coeff_modulus();
@@ -39,8 +39,9 @@ GSWCiphertext PirClient::generate_gsw_from_key() {
   RNSIter secret_key_iter(sk_ntt.data(), coeff_count);
   inverse_ntt_negacyclic_harvey(secret_key_iter, coeff_mod_count, ntt_tables);
 
-  key_gsw.encrypt_plain_to_gsw(sk_ntt, *encryptor_, *decryptor_, gsw_enc);
-  key_gsw.gsw_ntt_negacyclic_harvey(gsw_enc); // transform the GSW ciphertext to NTT form
+  key_gsw.encrypt_plain_to_gsw(sk_ntt, *encryptor_, *secret_key_, gsw_enc, use_seed);
+  // key_gsw.sealGSWVecToGSW(gsw_enc, temp_gsw);
+  // key_gsw.gsw_ntt_negacyclic_harvey(gsw_enc); // transform the GSW ciphertext to NTT form
   return gsw_enc;
 }
 
@@ -113,7 +114,7 @@ PirQuery PirClient::generate_query(const std::uint64_t entry_index, const bool u
   }
 
   // coeff_mod_count many rows, each row is B^{l-1},, ..., B^0 under different moduli
-  std::vector<std::vector<__uint128_t>> gadget = gsw_gadget(l, base_log2, coeff_mod_count, coeff_modulus);
+  std::vector<std::vector<uint64_t>> gadget = gsw_gadget(l, base_log2, coeff_mod_count, coeff_modulus);
 
   // This for-loop corresponds to the for-loop in Algorithm 1 from the OnionPIR paper
   int filled_cnt = dims_[0];  // we have already filled these many coefficients
@@ -140,8 +141,17 @@ PirQuery PirClient::generate_query(const std::uint64_t entry_index, const bool u
   return query;
 }
 
-size_t PirClient::write_query_to_stream(PirQuery &query, std::stringstream &data_stream) {
+size_t PirClient::write_query_to_stream(const PirQuery &query, std::stringstream &data_stream) {
   return query.save(data_stream);
+}
+
+size_t PirClient::write_gsw_to_stream(const std::vector<Ciphertext> &gsw, std::stringstream &gsw_stream) {
+  size_t total_size = 0;
+  for (auto &ct : gsw) {
+    size_t size = ct.save(gsw_stream);
+    total_size += size;
+  }
+  return total_size;
 }
 
 

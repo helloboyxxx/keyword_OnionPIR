@@ -170,6 +170,21 @@ PirServer::evaluate_first_dim(std::vector<seal::Ciphertext> &selection_vector) {
   return result;
 }
 
+void PirServer::load_gsw(std::stringstream &gsw_stream, GSWCiphertext &gsw) {
+  std::vector<seal::Ciphertext> temp_gsw;
+  // load 2l ciphertexts from the stream
+  for (size_t i = 0; i < 2 * pir_params_.get_l_key(); i++) {
+    seal::Ciphertext row;
+    row.load(context_, gsw_stream);
+    temp_gsw.push_back(row);
+  }
+
+  key_gsw.sealGSWVecToGSW(gsw, temp_gsw);
+  key_gsw.gsw_ntt_negacyclic_harvey(gsw); // transform the GSW ciphertext to NTT form
+}
+
+
+
 std::vector<seal::Ciphertext> PirServer::evaluate_gsw_product(std::vector<seal::Ciphertext> &result,
                                                               GSWCiphertext &selection_cipher) {
   
@@ -249,6 +264,9 @@ void PirServer::set_client_galois_key(uint32_t client_id, seal::GaloisKeys clien
 }
 
 void PirServer::set_client_gsw_key(uint32_t client_id, GSWCiphertext &&gsw_key) {
+  // print the dimension of the gsw_key
+  std::cout << "gsw_key dimension: " << gsw_key.size() << " " << gsw_key[0].size() << std::endl;
+
   client_gsw_keys_[client_id] = gsw_key;
 }
 

@@ -177,5 +177,8 @@ void PirParams::print_values() const {
   std::cout << "  seal_params_.plain_modulus().bitcount()\t= "
             << seal_params_.plain_modulus().bit_count() << std::endl;
 
+  std::cout << "  mod0: " << seal_params_.coeff_modulus()[0].value() << std::endl;
+  std::cout << "  mod1: " << seal_params_.coeff_modulus()[1].value() << std::endl;
+
   std::cout << "==============================================================" << std::endl;
 }
