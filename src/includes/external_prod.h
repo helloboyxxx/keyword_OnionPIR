@@ -49,8 +49,7 @@ public:
   void encrypt_plain_to_gsw(std::vector<uint64_t> const &plaintext,
                             seal::Encryptor const &encryptor,
                             seal::SecretKey const &sk,
-                            std::vector<seal::Ciphertext> &output,
-                            const bool use_seed);
+                            std::vector<seal::Ciphertext> &output);
 
   /**
   @brief Helper function for encrypt_plain_to_gsw. This function encrypts the
@@ -60,15 +59,13 @@ public:
   @param plaintext
   @param half 0 denotes the top l rows, 1 denotes the bottom l rows
   @param level level in the given half
-  @param use_seed when true, this function will create GSW ciphertext that can
-  be serialized. Otherwise, normal RGSW ciphertext is created.
   @return seal::Ciphertext
   */
   seal::Ciphertext
   enc_plain_to_gsw_one_row(std::vector<uint64_t> const &plaintext,
                            seal::Encryptor const &encryptor,
                            seal::SecretKey const &sk, const size_t half,
-                           const size_t level, const bool use_seed = false);
+                           const size_t level);
 
   /**
    * @brief Transform the given GSWCipher text from polynomial representation to NTT representation.

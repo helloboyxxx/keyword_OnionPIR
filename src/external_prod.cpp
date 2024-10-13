@@ -180,14 +180,13 @@ void GSWEval::query_to_gsw(std::vector<seal::Ciphertext> query, GSWCiphertext gs
 void GSWEval::encrypt_plain_to_gsw(std::vector<uint64_t> const &plaintext,
                                    seal::Encryptor const &encryptor,
                                    seal::SecretKey const &sk,
-                                   std::vector<seal::Ciphertext> &output,
-                                   const bool use_seed) {
+                                   std::vector<seal::Ciphertext> &output) {
   output.clear();
   // when poly_id = 0, we are working on the first half of the GSWCiphertext
   for (int poly_id = 0; poly_id < 2; poly_id++) {
     for (int k = 0; k < l; k++) {
       seal::Ciphertext cipher =
-          enc_plain_to_gsw_one_row(plaintext, encryptor, sk, poly_id, k, use_seed);
+          enc_plain_to_gsw_one_row(plaintext, encryptor, sk, poly_id, k);
       output.push_back(cipher);
     }
   }
@@ -197,7 +196,7 @@ seal::Ciphertext
 GSWEval::enc_plain_to_gsw_one_row(std::vector<uint64_t> const &plaintext,
                                   seal::Encryptor const &encryptor,
                                   seal::SecretKey const &sk, const size_t half,
-                                  const size_t level, const bool use_seed) {
+                                  const size_t level) {
 
   // Accessing context data within this function instead of passing these parameters
   const auto &parms = context->first_context_data()->parms();
@@ -210,7 +209,7 @@ GSWEval::enc_plain_to_gsw_one_row(std::vector<uint64_t> const &plaintext,
   std::vector<std::vector<uint64_t>> gadget = gsw_gadget(l, base_log2, coeff_mod_count, coeff_modulus);
 
   // ================== Second half of the seeded GSW ==================
-  if (use_seed && half == 1) {
+  if (half == 1) {
     seal::Ciphertext cipher;
     // extract the level column of gadget
     std::vector<uint64_t> col;
@@ -227,7 +226,7 @@ GSWEval::enc_plain_to_gsw_one_row(std::vector<uint64_t> const &plaintext,
   // If we are at the first half of the GSW, we are adding new things to the
   // first polynomial (c0) of the given BFV ciphertext. c1 is not touched.
   seal::Ciphertext cipher;
-  if (use_seed && half == 0) {
+  if (half == 0) {
     encryptor.encrypt_zero_symmetric_seeded(cipher);
   } else {
     encryptor.encrypt_zero_symmetric(cipher);
