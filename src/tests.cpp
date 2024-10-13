@@ -9,15 +9,15 @@
 #include <random>
 
 // "Default" Parameters for the PIR scheme
-#define DB_SZ             1 << 15       // Database size <==> Number of plaintexts in the database
-#define NUM_ENTRIES       1 << 14       // Number of entries in the database, can be less than DB_SZ
+#define DB_SZ             1 << 10       // Database size <==> Number of plaintexts in the database
+#define NUM_ENTRIES       1 << 10       // Number of entries in the database, can be less than DB_SZ
 #define GSW_L             5             // Parameter for GSW scheme. 
 #define GSW_L_KEY         15            // GSW for query expansion
 #define FST_DIM_SZ        256           // Number of dimensions of the hypercube
 #define PT_MOD_WIDTH      48            // Width of the plain modulus 
 #define CT_MODS	         {60, 60, 60}  // Coeff modulus for the BFV scheme
 
-#define EXPERIMENT_ITERATIONS 10
+#define EXPERIMENT_ITERATIONS 5
 
 void print_func_name(std::string func_name) {
 #ifdef _DEBUG
@@ -38,7 +38,6 @@ void run_tests() {
   // test_ct_sub();
   // serialization_example();
 
-  // test_pir();
   test_seeded_pir();
   // find_pt_mod_width();
   // find_best_params();
@@ -288,90 +287,6 @@ void serialization_example() {
 }
 
 
-// Testing Onion PIR scheme 
-void test_pir() {
-  print_func_name(__FUNCTION__);
-  auto server_time_sum = 0;
-  auto client_time_sum = 0;
-  
-  // setting parameters for PIR scheme
-  PirParams pir_params(DB_SZ, FST_DIM_SZ, NUM_ENTRIES, GSW_L,
-                       GSW_L_KEY, PT_MOD_WIDTH, CT_MODS);
-  pir_params.print_values();
-  PirServer server(pir_params); // Initialize the server with the parameters
-
-  BENCH_PRINT("Initializing server...");
-  // Data to be stored in the database.
-  std::vector<Entry> data = server.gen_data();
-  BENCH_PRINT("Server initialized");
-
-  // Run the query process many times.
-  srand(time(0)); // reset the seed for the random number generator
-  for (int i = 0; i < EXPERIMENT_ITERATIONS; i++) {
-    
-    // ========== OFFLINE PHASE ===========
-    // Initialize the client
-    PirClient client(pir_params);
-    const int client_id = rand();
-    std::stringstream gsw_stream;
-    // Client create galois keys and gsw keys and writes to the stream (to the server)
-    size_t gsw_key_size = client.write_gsw_to_stream(
-        client.generate_gsw_from_key(false), gsw_stream);
-    //--------------------------------------------------------------------------------
-    server.decryptor_ = client.get_decryptor();
-    server.set_client_galois_key(client_id, client.create_galois_keys());
-    
-    // Server receives the gsw keys and loads them
-    GSWCiphertext gsw_key;
-    server.load_gsw(gsw_stream, gsw_key);
-    server.set_client_gsw_key(client_id, std::move(gsw_key));
-
-
-    // ========== ONLINE PHASE ===========
-    // Client start generating query
-    size_t entry_index = rand() % pir_params.get_num_entries();
-    BENCH_PRINT("Experiment [" << i << "]");
-    DEBUG_PRINT("\t\tClient ID:\t" << client_id);
-    DEBUG_PRINT("\t\tEntry index:\t" << entry_index);
-
-    auto c_start_time = CURR_TIME;  // client start time for the query
-    auto query = client.generate_query(entry_index, false);
-    
-    auto s_start_time = CURR_TIME;  // server start time for processing the query
-    auto result = server.make_query(client_id, std::move(query));
-    auto s_end_time = CURR_TIME;
-    
-    // client gets result from the server and decrypts it
-    auto decrypted_result = client.decrypt_result(result);
-    Entry entry = client.get_entry_from_plaintext(entry_index, decrypted_result[0]);
-    auto c_end_time = CURR_TIME;
-    
-    DEBUG_PRINT("\t\tGSW key size:\t" << gsw_key_size);
-    BENCH_PRINT("\t\tServer time:\t" << TIME_DIFF(s_start_time, s_end_time) << " ms");
-    BENCH_PRINT("\t\tClient Time:\t" << TIME_DIFF(c_start_time, c_end_time) - TIME_DIFF(s_start_time, s_end_time) << " ms"); 
-    DEBUG_PRINT("\t\tNoise budget:\t" << client.get_decryptor()->invariant_noise_budget(result[0]));
-
-    server_time_sum += TIME_DIFF(s_start_time, s_end_time);
-    client_time_sum += TIME_DIFF(c_start_time, c_end_time) - TIME_DIFF(s_start_time, s_end_time);
-    if (entry == data[entry_index]) {
-      // print a green success message
-      std::cout << "\033[1;32mSuccess!\033[0m" << std::endl;
-    } else {
-      // print a red failure message
-      std::cout << "\033[1;31mFailure!\033[0m" << std::endl;
-
-      std::cout << "Result:\t";
-      print_entry(entry);
-      std::cout << "Data:\t";
-      print_entry(data[entry_index]);
-    }
-    PRINT_BAR;
-  }
-
-  std::cout << "Average server time: " << server_time_sum / EXPERIMENT_ITERATIONS << " ms" << std::endl;
-  std::cout << "Average client time: " << client_time_sum / EXPERIMENT_ITERATIONS << " ms" << std::endl;
-}
-
 void test_seeded_pir() {
   print_func_name(__FUNCTION__);
   auto server_time_sum = 0;
@@ -396,20 +311,17 @@ void test_seeded_pir() {
     // Initialize the client
     PirClient client(pir_params);
     const int client_id = rand();
-    std::stringstream gsw_stream, galois_key_stream, data_stream;
+    std::stringstream galois_key_stream, gsw_stream, data_stream;
 
     // Client create galois keys and gsw keys and writes to the stream (to the server)
+    size_t galois_key_size = client.create_galois_keys(galois_key_stream);
     size_t gsw_key_size = client.write_gsw_to_stream(
         client.generate_gsw_from_key(true), gsw_stream);
     //--------------------------------------------------------------------------------
     server.decryptor_ = client.get_decryptor();
-    server.set_client_galois_key(client_id, client.create_galois_keys());
-    
-    // Server receives the gsw keys and loads them
-    GSWCiphertext gsw_key;
-    server.load_gsw(gsw_stream, gsw_key);
-    server.set_client_gsw_key(client_id, std::move(gsw_key));
-
+    // Server receives the gsw keys and galois keys and loads them when needed
+    server.set_client_galois_key(client_id, galois_key_stream);
+    server.set_client_gsw_key(client_id, gsw_stream);
 
     // ===================== ONLINE PHASE =====================
     // Client start generating query
@@ -433,8 +345,9 @@ void test_seeded_pir() {
     Entry entry = client.get_entry_from_plaintext(entry_index, decrypted_result[0]);
     auto c_end_time = CURR_TIME;
     
-    DEBUG_PRINT("\t\tQuery size:\t" << query_size);
+    DEBUG_PRINT("\t\tGalois size:\t" << galois_key_size);
     DEBUG_PRINT("\t\tGSW key size:\t" << gsw_key_size);
+    DEBUG_PRINT("\t\tQuery size:\t" << query_size);
     BENCH_PRINT("\t\tServer time:\t" << TIME_DIFF(s_start_time, s_end_time) << " ms");
     BENCH_PRINT("\t\tClient Time:\t" << TIME_DIFF(c_start_time, c_end_time) - TIME_DIFF(s_start_time, s_end_time) << " ms"); 
     DEBUG_PRINT("\t\tNoise budget:\t" << client.get_decryptor()->invariant_noise_budget(result[0]));
@@ -493,19 +406,19 @@ void test_cuckoo_keyword_pir() {
     const int client_id = rand();
     DEBUG_PRINT("Client ID: " << client_id);
 
-    std::stringstream gsw_stream, galois_key_stream, data_stream;
+    // Initialize the client
+    PirClient client(pir_params);
+    std::stringstream galois_key_stream, gsw_stream, data_stream;
 
     // Client create galois keys and gsw keys and writes to the stream (to the server)
+    size_t galois_key_size = client.create_galois_keys(galois_key_stream);
     size_t gsw_key_size = client.write_gsw_to_stream(
-        client.generate_gsw_from_key(false), gsw_stream);
+        client.generate_gsw_from_key(true), gsw_stream);
     //--------------------------------------------------------------------------------
     server.decryptor_ = client.get_decryptor();
-    server.set_client_galois_key(client_id, client.create_galois_keys());
-    
-    // Server receives the gsw keys and loads them
-    GSWCiphertext gsw_key;
-    server.load_gsw(gsw_stream, gsw_key);
-    server.set_client_gsw_key(client_id, std::move(gsw_key));
+    // Server receives the gsw keys and galois keys and loads them when needed
+    server.set_client_galois_key(client_id, galois_key_stream);
+    server.set_client_gsw_key(client_id, gsw_stream);
 
     // Generate a random keyword using keyword_seed. 
     size_t wanted_keyword_idx = rand() % num_entries;
@@ -569,19 +482,17 @@ void find_pt_mod_width() {
       // Initialize the client
       PirClient client(pir_params);
       const int client_id = rand();
-      std::stringstream gsw_stream, galois_key_stream, data_stream;
+      std::stringstream galois_key_stream, gsw_stream, data_stream;
 
       // Client create galois keys and gsw keys and writes to the stream (to the server)
+      size_t galois_key_size = client.create_galois_keys(galois_key_stream);
       size_t gsw_key_size = client.write_gsw_to_stream(
-          client.generate_gsw_from_key(false), gsw_stream);
+          client.generate_gsw_from_key(true), gsw_stream);
       //--------------------------------------------------------------------------------
       server.decryptor_ = client.get_decryptor();
-      server.set_client_galois_key(client_id, client.create_galois_keys());
-      
-      // Server receives the gsw keys and loads them
-      GSWCiphertext gsw_key;
-      server.load_gsw(gsw_stream, gsw_key);
-      server.set_client_gsw_key(client_id, std::move(gsw_key));
+      // Server receives the gsw keys and galois keys and loads them when needed
+      server.set_client_galois_key(client_id, galois_key_stream);
+      server.set_client_gsw_key(client_id, gsw_stream);
 
       // === Client start generating query ===
       size_t entry_index = rand() % pir_params.get_num_entries();
@@ -654,19 +565,18 @@ void find_best_params() {
           // Initialize the client
           PirClient client(pir_params);
           const int client_id = rand();
-          std::stringstream gsw_stream, galois_key_stream, data_stream;
+          std::stringstream galois_key_stream, gsw_stream, data_stream;
 
           // Client create galois keys and gsw keys and writes to the stream (to the server)
+          size_t galois_key_size = client.create_galois_keys(galois_key_stream);
           size_t gsw_key_size = client.write_gsw_to_stream(
-              client.generate_gsw_from_key(false), gsw_stream);
+              client.generate_gsw_from_key(true), gsw_stream);
           //--------------------------------------------------------------------------------
           server.decryptor_ = client.get_decryptor();
-          server.set_client_galois_key(client_id, client.create_galois_keys());
-          
-          // Server receives the gsw keys and loads them
-          GSWCiphertext gsw_key;
-          server.load_gsw(gsw_stream, gsw_key);
-          server.set_client_gsw_key(client_id, std::move(gsw_key));
+          // Server receives the gsw keys and galois keys and loads them when needed
+          server.set_client_galois_key(client_id, galois_key_stream);
+          server.set_client_gsw_key(client_id, gsw_stream);
+
 
           // === Client start generating query ===
           size_t entry_index = rand() % pir_params.get_num_entries();

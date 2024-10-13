@@ -178,21 +178,6 @@ PirServer::evaluate_first_dim(std::vector<seal::Ciphertext> &selection_vector) {
   return result;
 }
 
-void PirServer::load_gsw(std::stringstream &gsw_stream, GSWCiphertext &gsw) {
-  std::vector<seal::Ciphertext> temp_gsw;
-  // load 2l ciphertexts from the stream
-  for (size_t i = 0; i < 2 * pir_params_.get_l_key(); i++) {
-    seal::Ciphertext row;
-    row.load(context_, gsw_stream);
-    temp_gsw.push_back(row);
-  }
-
-  key_gsw.sealGSWVecToGSW(gsw, temp_gsw);
-  key_gsw.gsw_ntt_negacyclic_harvey(gsw); // transform the GSW ciphertext to NTT form
-}
-
-
-
 std::vector<seal::Ciphertext> PirServer::evaluate_gsw_product(std::vector<seal::Ciphertext> &result,
                                                               GSWCiphertext &selection_cipher) {
   
@@ -267,13 +252,27 @@ std::vector<seal::Ciphertext> PirServer::expand_query(uint32_t client_id,
   return cts;
 }
 
-void PirServer::set_client_galois_key(uint32_t client_id, seal::GaloisKeys client_key) {
+void PirServer::set_client_galois_key(const uint32_t client_id, std::stringstream &galois_stream) {
+  seal::GaloisKeys client_key;
+  client_key.load(context_, galois_stream);
   client_galois_keys_[client_id] = client_key;
 }
 
-void PirServer::set_client_gsw_key(uint32_t client_id, GSWCiphertext &&gsw_key) {
+void PirServer::set_client_gsw_key(const uint32_t client_id, std::stringstream &gsw_stream) {
+  std::vector<seal::Ciphertext> temp_gsw;
+  // load 2l ciphertexts from the stream
+  for (size_t i = 0; i < 2 * pir_params_.get_l_key(); i++) {
+    seal::Ciphertext row;
+    row.load(context_, gsw_stream);
+    temp_gsw.push_back(row);
+  }
+  GSWCiphertext gsw_key;
+
+  key_gsw.sealGSWVecToGSW(gsw_key, temp_gsw);
+  key_gsw.gsw_ntt_negacyclic_harvey(gsw_key); // transform the GSW ciphertext to NTT form
+
   // print the dimension of the gsw_key
-  std::cout << "gsw_key dimension: " << gsw_key.size() << " " << gsw_key[0].size() << std::endl;
+  DEBUG_PRINT("gsw_key dimension: " << gsw_key.size() << " " << gsw_key[0].size());
 
   client_gsw_keys_[client_id] = gsw_key;
 }
@@ -406,7 +405,6 @@ void PirServer::set_database(std::vector<Entry> &new_db) {
     }
 
     if (entry.size() > pir_params_.get_entry_size()) {
-      // std::cout << entry.size() << std::endl;
         std::invalid_argument("Entry size is too large");
     }
   }

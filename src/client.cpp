@@ -194,7 +194,7 @@ void PirClient::cuckoo_process_reply(uint64_t seed1, uint64_t seed2, uint64_t ta
 }
 
 
-seal::GaloisKeys PirClient::create_galois_keys() {
+size_t PirClient::create_galois_keys(std::stringstream &galois_key_stream) const {
   std::vector<uint32_t> galois_elts = {1};
 
   // Compression factor determines how many bits there are per message (and
@@ -209,9 +209,8 @@ seal::GaloisKeys PirClient::create_galois_keys() {
   for (size_t i = min_ele; i <= params_.poly_modulus_degree() + 1; i = (i - 1) * 2 + 1) {
     galois_elts.push_back(i);
   }
-  seal::GaloisKeys galois_keys;
-  keygen_->create_galois_keys(galois_elts, galois_keys);
-  return galois_keys;
+  auto written_size = keygen_->create_galois_keys(galois_elts).save(galois_key_stream);
+  return written_size;
 }
 
 std::vector<seal::Plaintext> PirClient::decrypt_result(std::vector<seal::Ciphertext> reply) {

@@ -32,7 +32,7 @@ public:
 
   void cuckoo_process_reply(uint64_t seed1, uint64_t seed2, uint64_t table_size, Key keyword, std::vector<seal::Ciphertext> reply1, std::vector<seal::Ciphertext> reply2);
 
-  seal::GaloisKeys create_galois_keys();
+  size_t create_galois_keys(std::stringstream &galois_key_stream) const;
 
   std::vector<seal::Plaintext> decrypt_result(std::vector<seal::Ciphertext> reply);
   uint32_t client_id;

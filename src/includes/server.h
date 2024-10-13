@@ -45,7 +45,7 @@ public:
   std::vector<seal::Ciphertext> make_seeded_query(const uint32_t client_id, std::stringstream &data_stream);
 
 
-  void load_gsw(std::stringstream &stream, GSWCiphertext &gsw);
+  // void load_gsw(std::stringstream &stream, GSWCiphertext &gsw);
 
   /**
    * @brief A clever way to evaluate the external product for second to last dimensions. 
@@ -56,8 +56,8 @@ public:
    */
   std::vector<seal::Ciphertext> evaluate_gsw_product(std::vector<seal::Ciphertext> &result,
                                                      GSWCiphertext &selection_cipher);
-  void set_client_galois_key(uint32_t client_id, seal::GaloisKeys client_key);
-  void set_client_gsw_key(uint32_t client_id, GSWCiphertext &&gsw_key);
+  void set_client_galois_key(const uint32_t client_id, std::stringstream &gsw_stream);
+  void set_client_gsw_key(const uint32_t client_id, std::stringstream &gsw_stream);
 
   seal::Decryptor *decryptor_;
 

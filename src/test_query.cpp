@@ -22,27 +22,6 @@ void run_query_test() {
   // test.noise_budget_test();
 }
 
-std::unique_ptr<PirServer> PirTest::prepare_server(bool init_db, PirParams &pir_params, PirClient &client, const int client_id) {
-  std::unique_ptr<PirServer> server = std::make_unique<PirServer>(pir_params);
-  std::stringstream gsw_stream, galois_key_stream, data_stream;
-
-  // Client create galois keys and gsw keys and writes to the stream (to the server)
-  size_t gsw_key_size = client.write_gsw_to_stream(
-      client.generate_gsw_from_key(false), gsw_stream);
-  //--------------------------------------------------------------------------------
-  server->decryptor_ = client.get_decryptor();
-  server->set_client_galois_key(client_id, client.create_galois_keys());
-  
-  // Server receives the gsw keys and loads them
-  GSWCiphertext gsw_key;
-  server->load_gsw(gsw_stream, gsw_key);
-  server->set_client_gsw_key(client_id, std::move(gsw_key));
-
-  if (init_db) {
-    server->gen_data();
-  }
-  return server;
-}
 
 
 void PirTest::gen_and_expand() {
@@ -54,9 +33,21 @@ void PirTest::gen_and_expand() {
                        GSW_L_KEY, PT_MOD_WIDTH, CT_MODS);
   pir_params.print_values();
   PirClient client(pir_params);
+  PirServer server(pir_params); // Initialize the server with the parameters
   srand(time(0));
   const int client_id = rand();
-  std::unique_ptr<PirServer> server = prepare_server(false, pir_params, client, client_id);
+  // Initialize the client
+  std::stringstream galois_key_stream, gsw_stream, data_stream;
+
+  // Client create galois keys and gsw keys and writes to the stream (to the server)
+  size_t galois_key_size = client.create_galois_keys(galois_key_stream);
+  size_t gsw_key_size = client.write_gsw_to_stream(
+      client.generate_gsw_from_key(true), gsw_stream);
+  //--------------------------------------------------------------------------------
+  server.decryptor_ = client.get_decryptor();
+  // Server receives the gsw keys and galois keys and loads them when needed
+  server.set_client_galois_key(client_id, galois_key_stream);
+  server.set_client_gsw_key(client_id, gsw_stream);
 
   // ======================== Start generating the query
   // size_t entry_idx = rand() % pir_params.get_num_entries();
@@ -64,8 +55,8 @@ void PirTest::gen_and_expand() {
   PirQuery query = client.generate_query(entry_idx);  // a single BFV ciphertext
 
   // ======================== server receives the query and expand it
-  auto expanded_query = server->expand_query(client_id, query);  // a vector of BFV ciphertexts
-  std::vector<uint64_t> dims = server->get_dims();
+  auto expanded_query = server.expand_query(client_id, query);  // a vector of BFV ciphertexts
+  std::vector<uint64_t> dims = server.get_dims();
 
   // ======================== client decrypts the query vector and interprets the result
   std::vector<seal::Plaintext> decrypted_query = client.decrypt_result({query});
