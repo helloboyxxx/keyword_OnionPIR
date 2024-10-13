@@ -25,7 +25,7 @@ PirClient::~PirClient() {
 
 seal::Decryptor *PirClient::get_decryptor() { return decryptor_; }
 
-std::vector<Ciphertext> PirClient::generate_gsw_from_key(const bool use_seed) {
+std::vector<Ciphertext> PirClient::generate_gsw_from_key() {
   std::vector<seal::Ciphertext> gsw_enc; // temporary GSW ciphertext using seal::Ciphertext
   auto sk_ = secret_key_->data();
   auto ntt_tables = context_->first_context_data()->small_ntt_tables();
@@ -39,9 +39,7 @@ std::vector<Ciphertext> PirClient::generate_gsw_from_key(const bool use_seed) {
   RNSIter secret_key_iter(sk_ntt.data(), coeff_count);
   inverse_ntt_negacyclic_harvey(secret_key_iter, coeff_mod_count, ntt_tables);
 
-  key_gsw.encrypt_plain_to_gsw(sk_ntt, *encryptor_, *secret_key_, gsw_enc, use_seed);
-  // key_gsw.sealGSWVecToGSW(gsw_enc, temp_gsw);
-  // key_gsw.gsw_ntt_negacyclic_harvey(gsw_enc); // transform the GSW ciphertext to NTT form
+  key_gsw.encrypt_plain_to_gsw(sk_ntt, *encryptor_, *secret_key_, gsw_enc);
   return gsw_enc;
 }
 
@@ -63,7 +61,7 @@ std::vector<size_t> PirClient::get_query_indices(size_t plaintext_index) {
   return query_indices;
 }
 
-PirQuery PirClient::generate_query(const std::uint64_t entry_index, const bool use_seed) {
+PirQuery PirClient::generate_query(const std::uint64_t entry_index) {
 
   // ================== Setup parameters ==================
   // Get the corresponding index of the plaintext in the database
@@ -93,11 +91,7 @@ PirQuery PirClient::generate_query(const std::uint64_t entry_index, const bool u
   
   // Encrypt plain_query first. Later we will insert the rest. $\tilde c$ in paper
   PirQuery query;
-  if (use_seed) {
-    encryptor_->encrypt_symmetric_seeded(plain_query, query);
-  } else {
-    encryptor_->encrypt_symmetric(plain_query, query);
-  }
+  encryptor_->encrypt_symmetric_seeded(plain_query, query);
 
   auto l = pir_params_.get_l();
   auto base_log2 = pir_params_.get_base_log2();

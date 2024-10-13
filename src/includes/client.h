@@ -16,14 +16,10 @@ public:
   3. For the rest dimensions, calculate required RGSW coefficients and insert
   them into the ciphertext. Result is $\tilde c$ in paper.
   @param entry_index The input to the PIR blackbox.
-  @param use_seed By default set to true. Used for setting up
-  seal::Ciphertext so that it stores the seed instead of pseudorandom values
-  in c_1.
-  @return PirQuery Returns a normal Ciphertext whnen use_seed is set to
-  false. Otherwise, this returns a seal::Ciphertext with a a seed stored in
+  @return returns a seal::Ciphertext with a a seed stored in
   c_1, which should not be touched before doing serialization.
   */
-  PirQuery generate_query(const std::uint64_t entry_index, const bool use_seed = true);
+  PirQuery generate_query(const std::uint64_t entry_index);
 
   size_t write_query_to_stream(const PirQuery &query, std::stringstream &data_stream);
   size_t write_gsw_to_stream(const std::vector<Ciphertext> &gsw, std::stringstream &gsw_stream);
@@ -42,7 +38,7 @@ public:
   */
   Entry get_entry_from_plaintext(size_t entry_index, seal::Plaintext plaintext);
 
-  std::vector<Ciphertext> generate_gsw_from_key(const bool use_seed=true);
+  std::vector<Ciphertext> generate_gsw_from_key();
 
 private:
   seal::EncryptionParameters params_;

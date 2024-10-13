@@ -38,7 +38,7 @@ void run_tests() {
   // test_ct_sub();
   // serialization_example();
 
-  test_seeded_pir();
+  test_pir();
   // find_pt_mod_width();
   // find_best_params();
   // test_cuckoo_keyword_pir(); // single server version
@@ -287,7 +287,7 @@ void serialization_example() {
 }
 
 
-void test_seeded_pir() {
+void test_pir() {
   print_func_name(__FUNCTION__);
   auto server_time_sum = 0;
   auto client_time_sum = 0;

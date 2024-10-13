@@ -10,7 +10,7 @@ void serialization_example();
 
 void test_external_product();
 void test_cuckoo_keyword_pir();
-void test_seeded_pir();
+void test_pir();
 void find_pt_mod_width();
 void find_best_params();
 
