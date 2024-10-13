@@ -271,9 +271,6 @@ void PirServer::set_client_gsw_key(const uint32_t client_id, std::stringstream &
   key_gsw.sealGSWVecToGSW(gsw_key, temp_gsw);
   key_gsw.gsw_ntt_negacyclic_harvey(gsw_key); // transform the GSW ciphertext to NTT form
 
-  // print the dimension of the gsw_key
-  DEBUG_PRINT("gsw_key dimension: " << gsw_key.size() << " " << gsw_key[0].size());
-
   client_gsw_keys_[client_id] = gsw_key;
 }
 
