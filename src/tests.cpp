@@ -9,15 +9,15 @@
 #include <random>
 
 // "Default" Parameters for the PIR scheme
-#define DB_SZ             1 << 10       // Database size <==> Number of plaintexts in the database
-#define NUM_ENTRIES       1 << 10       // Number of entries in the database, can be less than DB_SZ
+#define DB_SZ             1 << 15       // Database size <==> Number of plaintexts in the database
+#define NUM_ENTRIES       1 << 14       // Number of entries in the database, can be less than DB_SZ
 #define GSW_L             5             // Parameter for GSW scheme. 
 #define GSW_L_KEY         15            // GSW for query expansion
 #define FST_DIM_SZ        256           // Number of dimensions of the hypercube
 #define PT_MOD_WIDTH      48            // Width of the plain modulus 
 #define CT_MODS	         {60, 60, 60}  // Coeff modulus for the BFV scheme
 
-#define EXPERIMENT_ITERATIONS 1
+#define EXPERIMENT_ITERATIONS 10
 
 void print_func_name(std::string func_name) {
 #ifdef _DEBUG

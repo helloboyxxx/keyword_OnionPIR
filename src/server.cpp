@@ -125,27 +125,35 @@ std::vector<seal::Ciphertext>
 PirServer::evaluate_first_dim(std::vector<seal::Ciphertext> &selection_vector) {
   const size_t fst_dim_sz = dims_[0];  // number of entries in the first dimension
   const size_t other_dim_sz = DBSize_ / fst_dim_sz;  // number of entries in the other dimensions
-  std::vector<seal::Ciphertext> result;
   const auto seal_params = context_.get_context_data(selection_vector[0].parms_id())->parms();
   const auto coeff_modulus = seal_params.coeff_modulus();
   const size_t coeff_count = seal_params.poly_modulus_degree();
   const size_t coeff_mod_count = coeff_modulus.size();
   const size_t encrypted_ntt_size = selection_vector[0].size();
+  const size_t coeff_val_cnt = coeff_count * coeff_mod_count;
+  
+  std::vector<seal::Ciphertext> result;
   seal::Ciphertext ct_acc;
 
-  for (size_t i = 0; i < fst_dim_sz; i++) {
-    evaluator_.transform_to_ntt_inplace(selection_vector[i]); // transform the selection vector to ntt
+  // transform the selection vector to ntt
+  for (size_t i = 0; i < selection_vector.size(); i++) {
+    evaluator_.transform_to_ntt_inplace(selection_vector[i]);
   }
 
-  for (size_t col = 0; col < other_dim_sz; ++col) {
+  // I imagine DB as a (other_dim_sz * fst_dim_sz) matrix, each column is
+  // other_dim_sz many consecutive entries in the database. We are going to
+  // multiply the selection_vector with the DB. Then only one row of the result
+  // is going to be added to the result vector.
+  for (size_t row = 0; row < other_dim_sz; ++row) {
     std::vector<std::vector<uint128_t>> buffer(
-        encrypted_ntt_size, std::vector<uint128_t>(coeff_count * coeff_mod_count, 0));
-    for (size_t i = 0; i < fst_dim_sz; i++) {
+        encrypted_ntt_size, std::vector<uint128_t>(coeff_val_cnt, 0));
+    // summing C_{BFV_k} * DB_{k(N / N_1) + j}
+    for (size_t col = 0; col < fst_dim_sz; col++) {
       for (size_t poly_id = 0; poly_id < encrypted_ntt_size; poly_id++) {
-        if (db_[col + i * other_dim_sz].has_value()) { // if the entry is not empty
-          utils::multiply_poly_acum(selection_vector[i].data(poly_id),
-                                    (*db_[col + i * other_dim_sz]).data(),
-                                    coeff_count * coeff_mod_count, buffer[poly_id].data()); 
+        if (db_[row + col * other_dim_sz].has_value()) { // if the entry is not empty
+          utils::multiply_poly_acum(selection_vector[col].data(poly_id),
+                                    (*db_[row + col * other_dim_sz]).data(),
+                                    coeff_val_cnt, buffer[poly_id].data()); 
         }
       }
     }
@@ -157,9 +165,9 @@ PirServer::evaluate_first_dim(std::vector<seal::Ciphertext> &selection_vector) {
         auto mod_idx = (mod_id * coeff_count);
 
         for (int coeff_id = 0; coeff_id < coeff_count; coeff_id++) {
-          pt_ptr[coeff_id + mod_idx] =
-              pt_ptr[coeff_id + mod_idx] % static_cast<__uint128_t>(coeff_modulus[mod_id].value()); // mod operation
-          ct_ptr[coeff_id + mod_idx] = static_cast<uint64_t>(pt_ptr[coeff_id + mod_idx]); // store the result in the ciphertext
+          ct_ptr[coeff_id + mod_idx] =
+              pt_ptr[coeff_id + mod_idx] %
+              static_cast<__uint128_t>(coeff_modulus[mod_id].value());
         }
       }
     }
@@ -246,7 +254,7 @@ std::vector<seal::Ciphertext> PirServer::expand_query(uint32_t client_id,
     for (size_t b = 0; b < expansion_const; b++) {
       Ciphertext cipher0 = cts[b];   // c_b in paper
       evaluator_.apply_galois_inplace(cipher0, poly_degree / expansion_const + 1,
-                                      client_galois_key); // Subs(c_b, k)
+                                      client_galois_key); // Subs(c_b, n/k + 1)
       Ciphertext temp;
       evaluator_.sub(cts[b], cipher0, temp);
       utils::shift_polynomial(params, temp,
@@ -340,14 +348,13 @@ std::vector<seal::Ciphertext> PirServer::make_query(const uint32_t client_id, Pi
 
   // Reconstruct RGSW queries
   auto convert_start = CURR_TIME;
-  int ptr = dims_[0];
   auto l = pir_params_.get_l();
   GSWCiphertext gsw_vec[dims_.size() - 1]; // GSW ciphertexts
   for (int i = 1; i < dims_.size(); i++) {
     std::vector<seal::Ciphertext> lwe_vector; // BFV ciphertext, size l * 2. This vector will be reconstructed as a single RGSW ciphertext.
     for (int k = 0; k < l; k++) {
+      auto ptr = dims_[0] + (i - 1) * l + k;
       lwe_vector.push_back(query_vector[ptr]);
-      ptr += 1;
     }
     // Converting the BFV ciphertext to GSW ciphertext
     key_gsw.query_to_gsw(lwe_vector, client_gsw_keys_[client_id], gsw_vec[i - 1]);
