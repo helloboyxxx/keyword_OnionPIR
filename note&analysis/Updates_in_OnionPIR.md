@@ -18,7 +18,7 @@ Is this a new stuff?
 // Computes a dot product between the selection vector and the database for the
 // first dimension with a delayed modulus optimization. Selection vector should
 // be transformed to ntt.
-std::vector<seal::Ciphertext> PirServer::evaluate_first_dim_delayed_mod(std::vector<seal::Ciphertext> &selection_vector)
+std::vector<seal::Ciphertext> PirServer::evaluate_first_dim(std::vector<seal::Ciphertext> &selection_vector)
 ```
 
 

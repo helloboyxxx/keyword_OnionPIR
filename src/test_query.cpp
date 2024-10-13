@@ -1,6 +1,15 @@
 #include "test_query.h"
 #include "utils.h"
 
+#define DB_SZ             1 << 15       // Database size <==> Number of plaintexts in the database
+#define NUM_ENTRIES       1 << 15       // Number of entries in the database
+#define GSW_L             5             // Parameter for GSW scheme. 
+#define GSW_L_KEY         15            // GSW for query expansion
+#define FST_DIM_SZ        256           // Number of dimensions of the hypercube
+#define PT_MOD_WIDTH      48            // Width of the plain modulus 
+#define CT_MODS      {60, 60, 60}  // Coeff modulus for the BFV scheme
+
+
 #define EXPERIMENT_ITER 1
 
 const size_t entry_idx = 1; // fixed index for testing
@@ -9,20 +18,10 @@ const size_t entry_idx = 1; // fixed index for testing
 void run_query_test() {
   PirTest test;
   // test.gen_and_expand();
-  // test.enc_then_add();
+  test.enc_then_add();
   // test.noise_budget_test();
 }
 
-std::unique_ptr<PirServer> PirTest::prepare_server(bool init_db, PirParams &pir_params, PirClient &client, const int client_id) {
-  std::unique_ptr<PirServer> server = std::make_unique<PirServer>(pir_params);
-  server->decryptor_ = client.get_decryptor();
-  server->set_client_galois_key(client_id, client.create_galois_keys());
-  server->set_client_gsw_key(client_id, client.generate_gsw_from_key());
-  if (init_db) {
-    server->gen_data();
-  }
-  return server;
-}
 
 
 void PirTest::gen_and_expand() {
@@ -30,12 +29,25 @@ void PirTest::gen_and_expand() {
   DEBUG_PRINT("Running: " << __FUNCTION__);
 
   // ======================== Initialize the client and server
-  PirParams pir_params{DB_SZ, NUM_DIM, NUM_ENTRIES, ENTRY_SZ, GSW_L, GSW_L_KEY};
+  PirParams pir_params(DB_SZ, FST_DIM_SZ, NUM_ENTRIES, GSW_L,
+                       GSW_L_KEY, PT_MOD_WIDTH, CT_MODS);
   pir_params.print_values();
   PirClient client(pir_params);
+  PirServer server(pir_params); // Initialize the server with the parameters
   srand(time(0));
   const int client_id = rand();
-  std::unique_ptr<PirServer> server = prepare_server(false, pir_params, client, client_id);
+  // Initialize the client
+  std::stringstream galois_key_stream, gsw_stream, data_stream;
+
+  // Client create galois keys and gsw keys and writes to the stream (to the server)
+  size_t galois_key_size = client.create_galois_keys(galois_key_stream);
+  size_t gsw_key_size = client.write_gsw_to_stream(
+      client.generate_gsw_from_key(true), gsw_stream);
+  //--------------------------------------------------------------------------------
+  server.decryptor_ = client.get_decryptor();
+  // Server receives the gsw keys and galois keys and loads them when needed
+  server.set_client_galois_key(client_id, galois_key_stream);
+  server.set_client_gsw_key(client_id, gsw_stream);
 
   // ======================== Start generating the query
   // size_t entry_idx = rand() % pir_params.get_num_entries();
@@ -43,8 +55,8 @@ void PirTest::gen_and_expand() {
   PirQuery query = client.generate_query(entry_idx);  // a single BFV ciphertext
 
   // ======================== server receives the query and expand it
-  auto expanded_query = server->expand_query(client_id, query);  // a vector of BFV ciphertexts
-  std::vector<uint64_t> dims = server->get_dims();
+  auto expanded_query = server.expand_query(client_id, query);  // a vector of BFV ciphertexts
+  std::vector<uint64_t> dims = server.get_dims();
 
   // ======================== client decrypts the query vector and interprets the result
   std::vector<seal::Plaintext> decrypted_query = client.decrypt_result({query});
@@ -81,12 +93,13 @@ void PirTest::enc_then_add() {
   DEBUG_PRINT("Running: " << __FUNCTION__);
 
   // ======================== Initialize the client and server
-  PirParams pir_params{DB_SZ, NUM_DIM, NUM_ENTRIES, ENTRY_SZ, GSW_L, GSW_L_KEY};
+  PirParams pir_params(DB_SZ, FST_DIM_SZ, NUM_ENTRIES, GSW_L,
+                       GSW_L_KEY, PT_MOD_WIDTH, CT_MODS);
   PirClient client(pir_params);
 
   // ======================== we try a simpler version of the client generate_query
   size_t plaintext_index = client.get_database_plain_index(entry_idx); // fixed index for testing
-  std::vector<size_t> query_indexes = client.get_query_indexes(plaintext_index);
+  std::vector<size_t> query_indices = client.get_query_indices(plaintext_index);
 
   auto context_data = client.context_->first_context_data();
   auto coeff_modulus = context_data->parms().coeff_modulus();
@@ -105,7 +118,7 @@ void PirTest::enc_then_add() {
   __uint128_t mod_mult = bigger_mod * smaller_mod;
   DEBUG_PRINT("mod_diff: " << mod_diff);
 
-  std::vector<std::vector<__uint128_t>> gadget = gsw_gadget(l, pir_params.get_base_log2(), coeff_mod_count, coeff_modulus);
+  std::vector<std::vector<uint64_t>> gadget = gsw_gadget(l, pir_params.get_base_log2(), coeff_mod_count, coeff_modulus);
 
   auto gadget_diffs = std::vector<uint64_t>(l);
   for (int i = 0; i < l; i++) {
@@ -119,7 +132,6 @@ void PirTest::enc_then_add() {
 
   // auto to_add = mod_diff * 4096 * 256;
   __uint128_t delta = mod_mult / plain_modulus;
-  // __uint128_t delta = 1ULL << 48;
   __uint128_t message = 15;
   __uint128_t to_add = delta * message;
   DEBUG_PRINT("delta:    \t" << uint128_to_string(delta));

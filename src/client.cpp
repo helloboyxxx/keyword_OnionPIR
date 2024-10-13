@@ -25,8 +25,8 @@ PirClient::~PirClient() {
 
 seal::Decryptor *PirClient::get_decryptor() { return decryptor_; }
 
-GSWCiphertext PirClient::generate_gsw_from_key() {
-  GSWCiphertext gsw_enc;
+std::vector<Ciphertext> PirClient::generate_gsw_from_key(const bool use_seed) {
+  std::vector<seal::Ciphertext> gsw_enc; // temporary GSW ciphertext using seal::Ciphertext
   auto sk_ = secret_key_->data();
   auto ntt_tables = context_->first_context_data()->small_ntt_tables();
   auto coeff_modulus = context_->first_context_data()->parms().coeff_modulus();
@@ -39,8 +39,9 @@ GSWCiphertext PirClient::generate_gsw_from_key() {
   RNSIter secret_key_iter(sk_ntt.data(), coeff_count);
   inverse_ntt_negacyclic_harvey(secret_key_iter, coeff_mod_count, ntt_tables);
 
-  key_gsw.encrypt_plain_to_gsw(sk_ntt, *encryptor_, *decryptor_, gsw_enc);
-  key_gsw.gsw_ntt_negacyclic_harvey(gsw_enc); // transform the GSW ciphertext to NTT form
+  key_gsw.encrypt_plain_to_gsw(sk_ntt, *encryptor_, *secret_key_, gsw_enc, use_seed);
+  // key_gsw.sealGSWVecToGSW(gsw_enc, temp_gsw);
+  // key_gsw.gsw_ntt_negacyclic_harvey(gsw_enc); // transform the GSW ciphertext to NTT form
   return gsw_enc;
 }
 
@@ -48,35 +49,36 @@ size_t PirClient::get_database_plain_index(size_t entry_index) {
   return entry_index / pir_params_.get_num_entries_per_plaintext();
 }
 
-std::vector<size_t> PirClient::get_query_indexes(size_t plaintext_index) {
-  std::vector<size_t> query_indexes;
+std::vector<size_t> PirClient::get_query_indices(size_t plaintext_index) {
+  std::vector<size_t> query_indices;
   size_t index = plaintext_index;
   size_t size_of_remaining_dims = DBSize_;
 
   for (auto dim_size : dims_) {
     size_of_remaining_dims /= dim_size;
-    query_indexes.push_back(index / size_of_remaining_dims);
+    query_indices.push_back(index / size_of_remaining_dims);
     index = index % size_of_remaining_dims;
   }
 
-  return query_indexes;
+  return query_indices;
 }
 
-PirQuery PirClient::generate_query(std::uint64_t entry_index) {
+PirQuery PirClient::generate_query(const std::uint64_t entry_index, const bool use_seed) {
 
+  // ================== Setup parameters ==================
   // Get the corresponding index of the plaintext in the database
   size_t plaintext_index = get_database_plain_index(entry_index);
-  std::vector<size_t> query_indexes = get_query_indexes(plaintext_index);
-  PRINT_INT_ARRAY("query_indexes", query_indexes.data(), query_indexes.size());
+  std::vector<size_t> query_indices = get_query_indices(plaintext_index);
+  PRINT_INT_ARRAY("\t\tquery_indices", query_indices.data(), query_indices.size());
   uint64_t coeff_count = params_.poly_modulus_degree(); // 4096
-
-  // The number of bits required for the first dimension is equal to the size of the first dimension
   uint64_t msg_size = dims_[0] + pir_params_.get_l() * (dims_.size() - 1);
   uint64_t bits_per_ciphertext = 1; // padding msg_size to the next power of 2
-
-  while (bits_per_ciphertext < msg_size)
+  // Calculate n, the number of slots used for packing and unpacking.
+  while (bits_per_ciphertext < msg_size) {
     bits_per_ciphertext *= 2;
+  }
 
+  // empty plaintext
   seal::Plaintext plain_query(coeff_count); // we allow 4096 coefficients in the plaintext polynomial to be set as suggested in the paper.
 
   // Algorithm 1 from the OnionPIR Paper
@@ -87,11 +89,15 @@ PirQuery PirClient::generate_query(std::uint64_t entry_index) {
   seal::util::try_invert_uint_mod(bits_per_ciphertext, plain_modulus, inverse);
 
   // Add the first dimension query vector to the query
-  plain_query[ query_indexes[0] ] = inverse;
+  plain_query[ query_indices[0] ] = inverse;
   
-  // Encrypt plain_query first. Later we will insert the rest.
-  PirQuery query; // pt in paper
-  encryptor_->encrypt_symmetric(plain_query, query);  // $\tilde c$ in paper
+  // Encrypt plain_query first. Later we will insert the rest. $\tilde c$ in paper
+  PirQuery query;
+  if (use_seed) {
+    encryptor_->encrypt_symmetric_seeded(plain_query, query);
+  } else {
+    encryptor_->encrypt_symmetric(plain_query, query);
+  }
 
   auto l = pir_params_.get_l();
   auto base_log2 = pir_params_.get_base_log2();
@@ -108,32 +114,46 @@ PirQuery PirClient::generate_query(std::uint64_t entry_index) {
   }
 
   // coeff_mod_count many rows, each row is B^{l-1},, ..., B^0 under different moduli
-  std::vector<std::vector<__uint128_t>> gadget = gsw_gadget(l, base_log2, coeff_mod_count, coeff_modulus);
+  std::vector<std::vector<uint64_t>> gadget = gsw_gadget(l, base_log2, coeff_mod_count, coeff_modulus);
+
 
   // This for-loop corresponds to the for-loop in Algorithm 1 from the OnionPIR paper
-  int filled_cnt = dims_[0];  // we have already filled these many coefficients
-  for (int i = 1; i < query_indexes.size(); i++) {  // dimensions
+  auto q_head = query.data(0); // points to the first coefficient of the first ciphertext(c0) 
+  for (int i = 1; i < query_indices.size(); i++) {  // dimensions
     // we use this if statement to replce the j for loop in Algorithm 1. This is because N_i = 2 for all i > 0
     // When 0 is requested, we use initial encrypted value of PirQuery query, where the coefficients decrypts to 0. 
     // When 1 is requested, we add special values to the coefficients of the query so that they decrypts to correct GSW(1) values.
-    if (query_indexes[i] == 1) {
+    if (query_indices[i] == 1) {
       // ! pt is a ct_coeff_type *. It points to the current position to be written.
-      auto ptr = query.data(0) + filled_cnt;  // points to the current collection of coefficients to be written
       for (int k = 0; k < l; k++) {
         for (int mod_id = 0; mod_id < coeff_mod_count; mod_id++) {
           auto pad = mod_id * coeff_count;   // We use two moduli for the same gadget value. They are apart by coeff_count.
+          auto coef_pos = dims_[0] + (i-1) * l + k + pad;  // the position of the coefficient in the query
           __uint128_t mod = coeff_modulus[mod_id].value();
           // the coeff is (B^{l-1}, ..., B^0) / bits_per_ciphertext
           auto coef = gadget[mod_id][k] * inv[mod_id] % mod;
-          ptr[k + pad] = (ptr[k + pad] + coef) % mod;
+          q_head[coef_pos] = (q_head[coef_pos] + coef) % mod;
         }
       }
     }
-    filled_cnt += l;
   }
 
   return query;
 }
+
+size_t PirClient::write_query_to_stream(const PirQuery &query, std::stringstream &data_stream) {
+  return query.save(data_stream);
+}
+
+size_t PirClient::write_gsw_to_stream(const std::vector<Ciphertext> &gsw, std::stringstream &gsw_stream) {
+  size_t total_size = 0;
+  for (auto &ct : gsw) {
+    size_t size = ct.save(gsw_stream);
+    total_size += size;
+  }
+  return total_size;
+}
+
 
 /**
  * @brief Generate two queries in cuckoo hashing 
@@ -174,7 +194,7 @@ void PirClient::cuckoo_process_reply(uint64_t seed1, uint64_t seed2, uint64_t ta
 }
 
 
-seal::GaloisKeys PirClient::create_galois_keys() {
+size_t PirClient::create_galois_keys(std::stringstream &galois_key_stream) const {
   std::vector<uint32_t> galois_elts = {1};
 
   // Compression factor determines how many bits there are per message (and
@@ -189,9 +209,8 @@ seal::GaloisKeys PirClient::create_galois_keys() {
   for (size_t i = min_ele; i <= params_.poly_modulus_degree() + 1; i = (i - 1) * 2 + 1) {
     galois_elts.push_back(i);
   }
-  seal::GaloisKeys galois_keys;
-  keygen_->create_galois_keys(galois_elts, galois_keys);
-  return galois_keys;
+  auto written_size = keygen_->create_galois_keys(galois_elts).save(galois_key_stream);
+  return written_size;
 }
 
 std::vector<seal::Plaintext> PirClient::decrypt_result(std::vector<seal::Ciphertext> reply) {

@@ -8,20 +8,31 @@ public:
   PirClient(const PirParams &pirparms);
   ~PirClient();
 
-  /*!
-      Generates an OnionPIR query corresponding to the plaintext that encodes
-     the given entry index. High level steps:
-     1. Calculate the plaintext index. Generate plaintexts query (b vectors in paper) for each dimension.
-     2. Creates a plain_query (pt in paper), add the first dimension, then encrypts it.
-     3. For the rest dimensions, calculate required RGSW coefficients and insert them into the ciphertext. Result is $\tilde c$ in paper.
+  /**
+  This is the core function for the client.
+  High level steps:
+  1. Compute the query indices.
+  2. Creates a plain_query (pt in paper), add the first dimension, then encrypts it.
+  3. For the rest dimensions, calculate required RGSW coefficients and insert
+  them into the ciphertext. Result is $\tilde c$ in paper.
+  @param entry_index The input to the PIR blackbox.
+  @param use_seed By default set to true. Used for setting up
+  seal::Ciphertext so that it stores the seed instead of pseudorandom values
+  in c_1.
+  @return PirQuery Returns a normal Ciphertext whnen use_seed is set to
+  false. Otherwise, this returns a seal::Ciphertext with a a seed stored in
+  c_1, which should not be touched before doing serialization.
   */
-  PirQuery generate_query(std::uint64_t entry_index);
+  PirQuery generate_query(const std::uint64_t entry_index, const bool use_seed = true);
+
+  size_t write_query_to_stream(const PirQuery &query, std::stringstream &data_stream);
+  size_t write_gsw_to_stream(const std::vector<Ciphertext> &gsw, std::stringstream &gsw_stream);
 
   std::vector<PirQuery> generate_cuckoo_query(uint64_t seed1, uint64_t seed2, uint64_t table_size, Key keyword);
 
   void cuckoo_process_reply(uint64_t seed1, uint64_t seed2, uint64_t table_size, Key keyword, std::vector<seal::Ciphertext> reply1, std::vector<seal::Ciphertext> reply2);
 
-  seal::GaloisKeys create_galois_keys();
+  size_t create_galois_keys(std::stringstream &galois_key_stream) const;
 
   std::vector<seal::Plaintext> decrypt_result(std::vector<seal::Ciphertext> reply);
   uint32_t client_id;
@@ -31,7 +42,7 @@ public:
   */
   Entry get_entry_from_plaintext(size_t entry_index, seal::Plaintext plaintext);
 
-  GSWCiphertext generate_gsw_from_key();
+  std::vector<Ciphertext> generate_gsw_from_key(const bool use_seed=true);
 
 private:
   seal::EncryptionParameters params_;
@@ -51,9 +62,9 @@ private:
   size_t get_database_plain_index(size_t entry_index);
 
   /*!
-      Gets the query indexes for a given plaintext
+      Gets the query indices for a given plaintext
   */
-  std::vector<size_t> get_query_indexes(size_t plaintext_index);
+  std::vector<size_t> get_query_indices(size_t plaintext_index);
 
   friend class PirTest;
 

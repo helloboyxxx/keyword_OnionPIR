@@ -106,7 +106,7 @@ std::string uint128_to_string(__uint128_t value);
  * @brief Construct a RGSW gadget. Notice that the gadget is from large to
  * small, i.e., the first row is B^(log q / log B -1), the final row is 1.
  */
-std::vector<std::vector<__uint128_t>>
+std::vector<std::vector<uint64_t>>
 gsw_gadget(size_t l, uint64_t base_log2, size_t coeff_mod_count,
            const std::vector<seal::Modulus> &coeff_modulus);
 

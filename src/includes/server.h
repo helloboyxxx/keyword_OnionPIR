@@ -39,7 +39,13 @@ public:
   std::vector<uint64_t> get_dims() const;
 
   // Given the client id and a packed client query, this function first unpacks the query, then returns the retrieved encrypted result.
-  std::vector<seal::Ciphertext> make_query(uint32_t client_id, PirQuery &&query);
+  std::vector<seal::Ciphertext> make_query(const uint32_t client_id, PirQuery &&query);
+
+  // similar to make_query, but accepts a stringstream as input instead of the huge PirQuery object.
+  std::vector<seal::Ciphertext> make_seeded_query(const uint32_t client_id, std::stringstream &data_stream);
+
+
+  // void load_gsw(std::stringstream &stream, GSWCiphertext &gsw);
 
   /**
    * @brief A clever way to evaluate the external product for second to last dimensions. 
@@ -50,8 +56,8 @@ public:
    */
   std::vector<seal::Ciphertext> evaluate_gsw_product(std::vector<seal::Ciphertext> &result,
                                                      GSWCiphertext &selection_cipher);
-  void set_client_galois_key(uint32_t client_id, seal::GaloisKeys client_key);
-  void set_client_gsw_key(uint32_t client_id, GSWCiphertext &&gsw_key);
+  void set_client_galois_key(const uint32_t client_id, std::stringstream &gsw_stream);
+  void set_client_gsw_key(const uint32_t client_id, std::stringstream &gsw_stream);
 
   seal::Decryptor *decryptor_;
 
@@ -78,8 +84,6 @@ private:
     database.
   */
   std::vector<seal::Ciphertext> evaluate_first_dim(std::vector<seal::Ciphertext> &selection_vector);
-  std::vector<seal::Ciphertext>
-  evaluate_first_dim_delayed_mod(std::vector<seal::Ciphertext> &selection_vector);
 
   /*!
     Transforms the plaintexts in the database into their NTT representation.
