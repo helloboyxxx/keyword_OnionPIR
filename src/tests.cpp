@@ -148,7 +148,7 @@ void test_external_product() {
             << std::endl;
   GSWCiphertext b_gsw;
   std::vector<seal::Ciphertext> temp_gsw;
-  data_gsw.encrypt_plain_to_gsw(b, encryptor_, secret_key_, temp_gsw, false);
+  data_gsw.encrypt_plain_to_gsw(b, encryptor_, secret_key_, temp_gsw);
   data_gsw.sealGSWVecToGSW(b_gsw, temp_gsw);
   data_gsw.gsw_ntt_negacyclic_harvey(b_gsw);  // transform b_gsw to NTT form
 
@@ -316,7 +316,7 @@ void test_pir() {
     // Client create galois keys and gsw keys and writes to the stream (to the server)
     size_t galois_key_size = client.create_galois_keys(galois_key_stream);
     size_t gsw_key_size = client.write_gsw_to_stream(
-        client.generate_gsw_from_key(true), gsw_stream);
+        client.generate_gsw_from_key(), gsw_stream);
     //--------------------------------------------------------------------------------
     server.decryptor_ = client.get_decryptor();
     // Server receives the gsw keys and galois keys and loads them when needed
@@ -332,7 +332,7 @@ void test_pir() {
 
     // ============= CLIENT ===============
     auto c_start_time = CURR_TIME;  // client start time for the query
-    PirQuery query = client.generate_query(entry_index, true);
+    PirQuery query = client.generate_query(entry_index);
     auto query_size = client.write_query_to_stream(query, data_stream);
     
     // ============= SERVER ===============
@@ -413,7 +413,7 @@ void test_cuckoo_keyword_pir() {
     // Client create galois keys and gsw keys and writes to the stream (to the server)
     size_t galois_key_size = client.create_galois_keys(galois_key_stream);
     size_t gsw_key_size = client.write_gsw_to_stream(
-        client.generate_gsw_from_key(true), gsw_stream);
+        client.generate_gsw_from_key(), gsw_stream);
     //--------------------------------------------------------------------------------
     server.decryptor_ = client.get_decryptor();
     // Server receives the gsw keys and galois keys and loads them when needed
@@ -487,7 +487,7 @@ void find_pt_mod_width() {
       // Client create galois keys and gsw keys and writes to the stream (to the server)
       size_t galois_key_size = client.create_galois_keys(galois_key_stream);
       size_t gsw_key_size = client.write_gsw_to_stream(
-          client.generate_gsw_from_key(true), gsw_stream);
+          client.generate_gsw_from_key(), gsw_stream);
       //--------------------------------------------------------------------------------
       server.decryptor_ = client.get_decryptor();
       // Server receives the gsw keys and galois keys and loads them when needed
@@ -570,7 +570,7 @@ void find_best_params() {
         // Client create galois keys and gsw keys and writes to the stream (to the server)
         size_t galois_key_size = client.create_galois_keys(galois_key_stream);
         size_t gsw_key_size = client.write_gsw_to_stream(
-            client.generate_gsw_from_key(true), gsw_stream);
+            client.generate_gsw_from_key(), gsw_stream);
         //--------------------------------------------------------------------------------
         server.decryptor_ = client.get_decryptor();
         // Server receives the gsw keys and galois keys and loads them when needed
@@ -582,7 +582,7 @@ void find_best_params() {
         size_t entry_index = rand() % pir_params.get_num_entries();
 
         // ============= CLIENT ===============
-        PirQuery query = client.generate_query(entry_index, true);
+        PirQuery query = client.generate_query(entry_index);
         auto query_size = client.write_query_to_stream(query, data_stream);
         
         // ============= SERVER ===============

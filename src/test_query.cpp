@@ -42,7 +42,7 @@ void PirTest::gen_and_expand() {
   // Client create galois keys and gsw keys and writes to the stream (to the server)
   size_t galois_key_size = client.create_galois_keys(galois_key_stream);
   size_t gsw_key_size = client.write_gsw_to_stream(
-      client.generate_gsw_from_key(true), gsw_stream);
+      client.generate_gsw_from_key(), gsw_stream);
   //--------------------------------------------------------------------------------
   server.decryptor_ = client.get_decryptor();
   // Server receives the gsw keys and galois keys and loads them when needed
