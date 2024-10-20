@@ -121,17 +121,7 @@ float PirParams::get_blowup_factor() const { return blowup_factor_; }
 
 // ================== HELPER FUNCTIONS ==================
 
-void print_entry(Entry entry) {
-  int cnt = 0;
-  for (auto &val : entry) {
-    std::cout << (int)val << ", ";
-    cnt += 1;
-    if (cnt > 10) {
-      break;
-    }
-  }
-  std::cout << std::endl;
-}
+
 
 
 Entry gen_single_key(uint64_t key_id, size_t hashed_key_width) {

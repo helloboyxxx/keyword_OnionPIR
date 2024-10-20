@@ -101,7 +101,7 @@ private:
 * @param len length(size) of the entry. Each entry is a vector of bytes.
 * @return Entry 
 */
-Entry generate_entry(int id, size_t entry_size);
+Entry generate_entry(const uint64_t id, const size_t entry_size);
 
 /**
  * @brief Generate an entry with a key_id. This will be used as a seed for
@@ -111,7 +111,7 @@ Entry generate_entry(int id, size_t entry_size);
  * entry_size - hashed_key_width = value_size is the only limit for the generated value.
  * @return Entry
  */
-Entry generate_entry_with_id(uint64_t key_id, size_t entry_size, size_t hashed_key_width);
+Entry generate_entry_with_key(uint64_t key_id, size_t entry_size, size_t hashed_key_width);
 
 
 /**

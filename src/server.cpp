@@ -16,22 +16,30 @@ PirServer::PirServer(const PirParams &pir_params)
 
 
 
-Entry generate_entry(int id, size_t entry_size) {
+Entry generate_entry(const uint64_t id, const size_t entry_size) {
   Entry entry;
   entry.reserve(entry_size); // reserving enough space will help reduce the number of reallocations.
   // rng here is a pseudo-random number generator: https://en.cppreference.com/w/cpp/numeric/random/mersenne_twister_engine
   // According to the notes in: https://en.cppreference.com/w/cpp/numeric/random/rand, 
   // rand() is not recommended for serious random-number generation needs. Therefore we need this mt19937.
   // Other methods are recommended in: 
+
+  idxToEntry(id, entry);
+
   std::mt19937_64 rng(id); 
-  for (int i = 0; i < entry_size; i++) {
+  for (int i = 8; i < entry_size; i++) {
     entry.push_back(rng() % 256); // 256 is the maximum value of a byte
   }
+
+  if (id == 256) {
+    print_entry(entry);
+  }
+
   return entry;
 }
 
 
-Entry generate_entry_with_id(uint64_t key_id, size_t entry_size, size_t hashed_key_width) {
+Entry generate_entry_with_key(uint64_t key_id, size_t entry_size, size_t hashed_key_width) {
   if (entry_size < hashed_key_width) {
     throw std::invalid_argument("Entry size is too small for the hashed key width");
   }
@@ -49,10 +57,18 @@ Entry generate_entry_with_id(uint64_t key_id, size_t entry_size, size_t hashed_k
 
 // Fills the database with random data
 std::vector<Entry> PirServer::gen_data() {
-  std::vector<Entry> data;
-  data.reserve(pir_params_.get_num_entries());
-  for (int i = 0; i < pir_params_.get_num_entries(); i++) {
-    data.push_back(generate_entry(i, pir_params_.get_entry_size()));
+  std::vector<Entry> data(pir_params_.get_num_entries(), Entry(pir_params_.get_entry_size()));
+  // for (int i = 0; i < pir_params_.get_num_entries(); i++) {
+  //   data[i] = generate_entry(i, pir_params_.get_entry_size());
+  // }
+
+  const size_t fst_dim_sz = dims_[0];
+  const size_t other_dim_sz = DBSize_ / fst_dim_sz;
+  for (size_t k = 0; k < fst_dim_sz; ++k) {
+    for (size_t j = 0; j < other_dim_sz; ++j) {
+      size_t orig_idx = k * other_dim_sz + j;
+      data[k + j * fst_dim_sz] = generate_entry(orig_idx, pir_params_.get_entry_size());
+    }
   }
   set_database(data);
   return data;
@@ -97,7 +113,7 @@ CuckooInitData PirServer::gen_keyword_data(size_t max_iter, uint64_t keyword_see
       size_t hashed_key_width = pir_params_.get_hashed_key_width();
       for (size_t j = 0; j < pir_params_.get_num_entries(); ++j) {
         // Keyword(string) -> hash to fixed size bit string
-        Entry entry = generate_entry_with_id(keywords[j], entry_size, hashed_key_width);
+        Entry entry = generate_entry_with_key(keywords[j], entry_size, hashed_key_width);
         size_t index1 = std::hash<Key>{}(keywords[j] ^ seed1) % cuckoo_hash_table.size();
         size_t index2 = std::hash<Key>{}(keywords[j] ^ seed2) % cuckoo_hash_table.size(); 
         if (cuckoo_hash_table[index1] == keywords[j]) {

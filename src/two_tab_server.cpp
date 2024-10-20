@@ -85,7 +85,7 @@ CuckooInitData PirServer::gen_keyword_data(size_t max_iter, uint64_t keyword_see
       for (size_t j = 0; j < pir_params_.get_num_entries(); ++j) {
         // Keyword(string) -> hash to fixed size bit string
         Key entry_key = keywords[j];
-        Entry entry = generate_entry_with_id(entry_key, entry_size, hashed_key_width);
+        Entry entry = generate_entry_with_key(entry_key, entry_size, hashed_key_width);
         size_t out1[4];
         MurmurHash3_x86_128(&entry_key, sizeof(entry_key), seed1, out1);
         size_t index1 = out1[0] % half_size;
@@ -434,7 +434,7 @@ Entry generate_entry(int id, size_t entry_size) {
 }
 
 
-Entry generate_entry_with_id(uint64_t key_id, size_t entry_size, size_t hashed_key_width) {
+Entry generate_entry_with_key(uint64_t key_id, size_t entry_size, size_t hashed_key_width) {
   if (entry_size < hashed_key_width) {
     throw std::invalid_argument("Entry size is too small for the hashed key width");
   }

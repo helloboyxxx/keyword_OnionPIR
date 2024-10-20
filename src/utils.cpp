@@ -136,3 +136,70 @@ std::uint64_t generate_prime(size_t bit_width) {
   
   return candidate;
 }
+
+// converting a uint64_t to a std::vector<uint8_t> of size 8
+void idxToEntry(const uint64_t idx, Entry &entry) {
+  // Convert id to bytes and push them to the entry.
+  for (int i = 7; i >= 0; --i) {
+      // Shift the value to the right and mask the lowest byte, then push it to the vector
+      entry.push_back(static_cast<uint8_t>(idx >> (i * 8)));
+  }
+}
+
+bool check_entry_idx(const Entry &entry, const uint64_t query_idx) {
+  Entry query_entry;
+  idxToEntry(query_idx, query_entry);
+
+  bool flag = true;
+  // compare the first 8 bytes of the entry with the query_idx
+  for (int i = 0; i < query_entry.size(); i++) {
+    if (entry[i] != query_entry[i]) {
+      DEBUG_PRINT("entry[" << i << "] = " << (int)entry[i] << " query_entry[" << i << "] = " << (int)query_entry[i]);
+      flag = false;
+    }
+  }
+  return flag;
+}
+
+
+
+void print_entry(const Entry &entry) {
+  int cnt = 0;
+  for (auto &val : entry) {
+    if (cnt < 10) { 
+      std::cout << (int)val << ", ";
+    }
+    cnt += 1;
+  }
+  std::cout << std::endl;
+}
+
+
+bool entry_is_equal(const Entry &entry1, const Entry &entry2) {
+  for (size_t i = 0; i < entry1.size(); i++) {
+    if (entry1[i] != entry2[i]) {
+      std::cerr << "Entries are not equal" << std::endl;
+      return false;
+    }
+  }
+  std::cout << "Entries are equal" << std::endl;
+  return true;
+}
+
+size_t entry_idx_to_actual(const size_t entry_idx, const size_t fst_dim_sz, const size_t num_entries) {
+
+  // compute N / N_1
+  size_t other_dim_sz = num_entries / fst_dim_sz;
+
+
+  // we remap (N/N_1) * k + j to k + j * N_1
+  size_t k = entry_idx / other_dim_sz;
+  size_t j = entry_idx % other_dim_sz;
+
+  DEBUG_PRINT("fst_dim_sz: " << fst_dim_sz);
+  DEBUG_PRINT("num_entries: " << num_entries);
+  DEBUG_PRINT("other_dim_sz: " << other_dim_sz);
+  DEBUG_PRINT("entry_idx: " << entry_idx << " k: " << k << " j: " << j);
+
+  return k + j * fst_dim_sz;
+}

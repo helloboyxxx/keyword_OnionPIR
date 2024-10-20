@@ -1,4 +1,5 @@
 #pragma once
+#include "pir.h"
 #include "seal/seal.h"
 #include <iostream>
 
@@ -113,3 +114,17 @@ gsw_gadget(size_t l, uint64_t base_log2, size_t coeff_mod_count,
 
 // Generate a prime that is bit_width long
 std::uint64_t generate_prime(size_t bit_width);
+
+void idxToEntry(const uint64_t idx, Entry &entry);
+
+// Given the entry, check if the first 8 bytes has the correct index
+bool check_entry_idx(const Entry &entry, const uint64_t query_idx);
+
+void print_entry(const Entry &entry);
+
+bool entry_is_equal(const Entry &entry1, const Entry &entry2);
+
+
+// logical entry index to the actuall index in the database.
+// This is a trick we do for reducing the miss cache rate when evaluating the first dimension.
+size_t entry_idx_to_actual(const size_t entry_idx, const size_t fst_dim_sz, const size_t num_entries);

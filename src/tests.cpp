@@ -17,7 +17,7 @@
 #define PT_MOD_WIDTH      48            // Width of the plain modulus 
 #define CT_MODS	         {60, 60, 60}  // Coeff modulus for the BFV scheme
 
-#define EXPERIMENT_ITERATIONS 5
+#define EXPERIMENT_ITERATIONS 1
 
 void print_func_name(std::string func_name) {
 #ifdef _DEBUG
@@ -326,13 +326,15 @@ void test_pir() {
     // ===================== ONLINE PHASE =====================
     // Client start generating query
     size_t entry_index = rand() % pir_params.get_num_entries();
+    auto actual_idx = entry_idx_to_actual(entry_index, FST_DIM_SZ, NUM_ENTRIES);
     BENCH_PRINT("Experiment [" << i << "]");
     DEBUG_PRINT("\t\tClient ID:\t" << client_id);
     DEBUG_PRINT("\t\tEntry index:\t" << entry_index);
+    DEBUG_PRINT("\t\tActual index:\t" << actual_idx);
 
     // ============= CLIENT ===============
     auto c_start_time = CURR_TIME;  // client start time for the query
-    PirQuery query = client.generate_query(entry_index);
+    PirQuery query = client.generate_query(actual_idx);
     auto query_size = client.write_query_to_stream(query, data_stream);
     
     // ============= SERVER ===============
@@ -342,9 +344,11 @@ void test_pir() {
     
     // client gets result from the server and decrypts it
     auto decrypted_result = client.decrypt_result(result);
-    Entry entry = client.get_entry_from_plaintext(entry_index, decrypted_result[0]);
+    Entry entry = client.get_entry_from_plaintext(actual_idx, decrypted_result[0]);
     auto c_end_time = CURR_TIME;
-    
+
+
+    // ============= PRINTING RESULTS ===============
     DEBUG_PRINT("\t\tGalois size:\t" << galois_key_size);
     DEBUG_PRINT("\t\tGSW key size:\t" << gsw_key_size);
     DEBUG_PRINT("\t\tQuery size:\t" << query_size);
@@ -354,7 +358,7 @@ void test_pir() {
 
     server_time_sum += TIME_DIFF(s_start_time, s_end_time);
     client_time_sum += TIME_DIFF(c_start_time, c_end_time) - TIME_DIFF(s_start_time, s_end_time);
-    if (entry == data[entry_index]) {
+    if (check_entry_idx(data[actual_idx], entry_index) && entry_is_equal(entry, data[actual_idx])) {
       // print a green success message
       std::cout << "\033[1;32mSuccess!\033[0m" << std::endl;
     } else {
@@ -364,7 +368,7 @@ void test_pir() {
       std::cout << "Result:\t";
       print_entry(entry);
       std::cout << "Data:\t";
-      print_entry(data[entry_index]);
+      print_entry(data[actual_idx]);
     }
     PRINT_BAR;
   }
