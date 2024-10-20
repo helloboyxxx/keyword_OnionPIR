@@ -160,15 +160,16 @@ PirServer::evaluate_first_dim(std::vector<seal::Ciphertext> &selection_vector) {
   // other_dim_sz many consecutive entries in the database. We are going to
   // multiply the selection_vector with the DB. Then only one row of the result
   // is going to be added to the result vector.
-  for (size_t row = 0; row < other_dim_sz; ++row) {
+  for (size_t j = 0; j < other_dim_sz; ++j) {
     std::vector<std::vector<uint128_t>> buffer(
         encrypted_ntt_size, std::vector<uint128_t>(coeff_val_cnt, 0));
-    // summing C_{BFV_k} * DB_{k(N / N_1) + j}
-    for (size_t col = 0; col < fst_dim_sz; col++) {
+    // // summing C_{BFV_k} * DB_{k(N / N_1) + j}
+    // summing C_{BFV_k} * DB_{N_1 * j + k}
+    for (size_t k = 0; k < fst_dim_sz; k++) {
       for (size_t poly_id = 0; poly_id < encrypted_ntt_size; poly_id++) {
-        if (db_[row + col * other_dim_sz].has_value()) { // if the entry is not empty
-          utils::multiply_poly_acum(selection_vector[col].data(poly_id),
-                                    (*db_[row + col * other_dim_sz]).data(),
+        if (db_[fst_dim_sz * j + k].has_value()) { // if the entry is not empty
+          utils::multiply_poly_acum(selection_vector[k].data(poly_id),
+                                    (*db_[fst_dim_sz * j + k]).data(),
                                     coeff_val_cnt, buffer[poly_id].data()); 
         }
       }

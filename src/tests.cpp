@@ -9,15 +9,15 @@
 #include <random>
 
 // "Default" Parameters for the PIR scheme
-#define DB_SZ             1 << 10       // Database size <==> Number of plaintexts in the database
-#define NUM_ENTRIES       1 << 10       // Number of entries in the database, can be less than DB_SZ
+#define DB_SZ             1 << 17       // Database size <==> Number of plaintexts in the database
+#define NUM_ENTRIES       1 << 17       // Number of entries in the database, can be less than DB_SZ
 #define GSW_L             5             // Parameter for GSW scheme. 
 #define GSW_L_KEY         15            // GSW for query expansion
 #define FST_DIM_SZ        256           // Number of dimensions of the hypercube
 #define PT_MOD_WIDTH      48            // Width of the plain modulus 
 #define CT_MODS	         {60, 60, 60}  // Coeff modulus for the BFV scheme
 
-#define EXPERIMENT_ITERATIONS 1
+#define EXPERIMENT_ITERATIONS 10
 
 void print_func_name(std::string func_name) {
 #ifdef _DEBUG
@@ -334,7 +334,7 @@ void test_pir() {
 
     // ============= CLIENT ===============
     auto c_start_time = CURR_TIME;  // client start time for the query
-    PirQuery query = client.generate_query(actual_idx);
+    PirQuery query = client.generate_query(entry_index);
     auto query_size = client.write_query_to_stream(query, data_stream);
     
     // ============= SERVER ===============
@@ -344,7 +344,7 @@ void test_pir() {
     
     // client gets result from the server and decrypts it
     auto decrypted_result = client.decrypt_result(result);
-    Entry entry = client.get_entry_from_plaintext(actual_idx, decrypted_result[0]);
+    Entry entry = client.get_entry_from_plaintext(entry_index, decrypted_result[0]);
     auto c_end_time = CURR_TIME;
 
 
