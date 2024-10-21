@@ -30,11 +30,6 @@ Entry generate_entry(const uint64_t id, const size_t entry_size) {
   for (int i = 8; i < entry_size; i++) {
     entry.push_back(rng() % 256); // 256 is the maximum value of a byte
   }
-
-  if (id == 256) {
-    print_entry(entry);
-  }
-
   return entry;
 }
 
@@ -56,25 +51,24 @@ Entry generate_entry_with_key(uint64_t key_id, size_t entry_size, size_t hashed_
 
 
 // Fills the database with random data
-std::vector<Entry> PirServer::gen_data() {
-  std::vector<Entry> data(pir_params_.get_num_entries(), Entry(pir_params_.get_entry_size()));
-  // for (int i = 0; i < pir_params_.get_num_entries(); i++) {
-  //   data[i] = generate_entry(i, pir_params_.get_entry_size());
-  // }
+void PirServer::gen_data() {
+  std::vector<std::vector<Entry>> chunks;
 
-  const size_t fst_dim_sz = dims_[0];
+  auto fst_dim_sz = dims_[0];
   const size_t other_dim_sz = DBSize_ / fst_dim_sz;
-  for (size_t k = 0; k < fst_dim_sz; ++k) {
-    for (size_t j = 0; j < other_dim_sz; ++j) {
-      size_t orig_idx = k * other_dim_sz + j;
-      data[k + j * fst_dim_sz] = generate_entry(orig_idx, pir_params_.get_entry_size());
+  for (size_t j = 0; j < other_dim_sz; ++j) {
+    std::vector<Entry> one_chunk(fst_dim_sz, Entry(pir_params_.get_entry_size()));
+    for (size_t k = 0; k < fst_dim_sz; ++k) {
+      one_chunk[k] = generate_entry(other_dim_sz * k + j, pir_params_.get_entry_size());
     }
+    push_database_chunk(one_chunk);
+    print_progress(j+1, other_dim_sz);  // DEBUG ONLY
   }
-  set_database(data);
-  return data;
+  // transform the ntt_db_ from coefficient form to ntt form. db_ is not transformed.
+  preprocess_ntt();
 }
 
-CuckooInitData PirServer::gen_keyword_data(size_t max_iter, uint64_t keyword_seed) {
+std::vector<CuckooSeeds> PirServer::gen_keyword_data(size_t max_iter, uint64_t keyword_seed) {
   // Generate random keywords for the database.
   std::vector<Key> keywords;
   size_t key_num = pir_params_.get_num_entries() / pir_params_.get_blowup_factor(); // TODO: put this as pir params
@@ -124,14 +118,15 @@ CuckooInitData PirServer::gen_keyword_data(size_t max_iter, uint64_t keyword_see
       }
 
       // set the database and return the used seeds and the database to the client. Data is returned for debugging purposes.
-      set_database(data);
-      return {used_seeds, data};
+      // set_database(data);  // TODO: fix this set_database using new method.
+      return used_seeds;
     }
   }
   std::cerr << "Failed to insert data into cuckoo hash table" << std::endl;
   // resize the cuckoo_hash_table to 0
-  return {used_seeds, {}};
+  return used_seeds;
 }
+
 
 
 // Computes a dot product between the selection vector and the database for the
@@ -163,13 +158,12 @@ PirServer::evaluate_first_dim(std::vector<seal::Ciphertext> &selection_vector) {
   for (size_t j = 0; j < other_dim_sz; ++j) {
     std::vector<std::vector<uint128_t>> buffer(
         encrypted_ntt_size, std::vector<uint128_t>(coeff_val_cnt, 0));
-    // // summing C_{BFV_k} * DB_{k(N / N_1) + j}
     // summing C_{BFV_k} * DB_{N_1 * j + k}
     for (size_t k = 0; k < fst_dim_sz; k++) {
       for (size_t poly_id = 0; poly_id < encrypted_ntt_size; poly_id++) {
-        if (db_[fst_dim_sz * j + k].has_value()) { // if the entry is not empty
+        if (ntt_db_[j][k].has_value()) { // if the entry is not empty
           utils::multiply_poly_acum(selection_vector[k].data(poly_id),
-                                    (*db_[fst_dim_sz * j + k]).data(),
+                                    (*ntt_db_[j][k]).data(),
                                     coeff_val_cnt, buffer[poly_id].data()); 
         }
       }
@@ -291,6 +285,19 @@ void PirServer::set_client_gsw_key(const uint32_t client_id, std::stringstream &
   client_gsw_keys_[client_id] = gsw_key;
 }
 
+
+
+seal::Plaintext PirServer::direct_get_pt(const uint64_t abstract_idx) {
+  auto actual_idx = entry_idx_to_actual(abstract_idx, dims_[0], DBSize_);
+  std::optional<seal::Plaintext> pt = db_.at(actual_idx / dims_[0]).at(actual_idx % dims_[0]);
+  if (pt.has_value()) {
+    return *pt;
+  }
+  throw std::invalid_argument("Entry not found");
+}
+
+
+
 std::vector<Key> cuckoo_insert(uint64_t seed1, uint64_t seed2, size_t swap_limit,
                                  std::vector<Key> &keywords, float blowup_factor) {
   std::vector<uint64_t> two_tables(keywords.size() * blowup_factor, 0); // cuckoo hash table for keywords
@@ -409,11 +416,13 @@ std::vector<seal::Ciphertext> PirServer::make_seeded_query(const uint32_t client
   return make_query(client_id, std::move(query));
 }
 
-void PirServer::set_database(std::vector<Entry> &new_db) {
+
+void PirServer::push_database_chunk(std::vector<Entry> &chunk_entry) {
+
   // Flattens data into vector of u8s and pads each entry with 0s to entry_size number of bytes.
   // This is actually resizing from entry.size() to pir_params_.get_entry_size()
   // This is redundent if the given entries uses the same pir parameters.
-  for (Entry &entry : new_db) {
+  for (Entry &entry : chunk_entry) {
     if (entry.size() != 0 && entry.size() <= pir_params_.get_entry_size()) {
       entry.resize(pir_params_.get_entry_size(), 0);
     }
@@ -423,14 +432,12 @@ void PirServer::set_database(std::vector<Entry> &new_db) {
     }
   }
 
+  DatabaseChunk chunk;
   size_t bits_per_coeff = pir_params_.get_num_bits_per_coeff();
   size_t num_coeffs = pir_params_.get_seal_params().poly_modulus_degree();
   size_t num_bits_per_plaintext = pir_params_.get_num_bits_per_plaintext();
   size_t num_entries_per_plaintext = pir_params_.get_num_entries_per_plaintext();
-  size_t num_plaintexts = new_db.size() / num_entries_per_plaintext;  // number of real plaintexts in the new database
-
-  db_ = Database(); // create an empty database
-  db_.reserve(DBSize_); // reserve space for DBSize_ elements as it will always be padded below.
+  size_t num_plaintexts = chunk_entry.size() / num_entries_per_plaintext;  // number of plaintexts in the new chunk
 
   const uint128_t coeff_mask = (uint128_t(1) << (bits_per_coeff)) - 1;  // bits_per_coeff many 1s
 
@@ -443,12 +450,12 @@ void PirServer::set_database(std::vector<Entry> &new_db) {
     // NOTE: it is possible that some entry is empty, which has size 0.
     int additive_sum_size = 0;
     for (int j = num_entries_per_plaintext * i;
-         j < std::min(num_entries_per_plaintext * (i + 1), new_db.size()); j++) {
-      additive_sum_size += new_db[j].size();
+         j < std::min(num_entries_per_plaintext * (i + 1), chunk_entry.size()); j++) {
+      additive_sum_size += chunk_entry[j].size();
     }
 
     if (additive_sum_size == 0) {
-      db_.push_back({});  // push an empty std::optional<seal::Plaintext>. {} is equivalent to std::nullopt
+      chunk.push_back({});  // push an empty std::optional<seal::Plaintext>. {} is equivalent to std::nullopt
       continue;
     }
 
@@ -457,11 +464,11 @@ void PirServer::set_database(std::vector<Entry> &new_db) {
     size_t data_offset = 0;
     // For each entry in the current plaintext
     for (int j = num_entries_per_plaintext * i;
-         j < std::min(num_entries_per_plaintext * (i + 1), new_db.size()); j++) {
+         j < std::min(num_entries_per_plaintext * (i + 1), chunk_entry.size()); j++) {
       // For each byte in this entry
       for (int k = 0; k < pir_params_.get_entry_size(); k++) {
         // data_buffer temporarily stores the data from entry bytes
-        data_buffer += uint128_t(new_db[j][k]) << data_offset;
+        data_buffer += uint128_t(chunk_entry[j][k]) << data_offset;
         data_offset += 8;
         // When we have enough data to fill a coefficient
         // We will one by one fill the coefficients with the data_buffer.
@@ -478,26 +485,28 @@ void PirServer::set_database(std::vector<Entry> &new_db) {
       plaintext[index] = data_buffer & coeff_mask;
       index++;
     }
-    db_.push_back(plaintext);
+    chunk.push_back(plaintext);
   }
 
   // Pad database with plaintext of 1s until DBSize_
   // ? Why {} is equal to 1? Guess: {} will be treated as 1 during the multiplication of polynomial.
   // Since we have reserved enough spaces for DBSize_ elements, this won't result in reallocations
   for (size_t i = db_.size(); i < DBSize_; i++) {
-    db_.push_back({});
+    chunk.push_back({});
   }
 
-  // Process database
-  preprocess_ntt();
-
-  // TODO: tutorial on Number Theoretic Transform (NTT): https://youtu.be/Pct3rS4Y0IA?si=25VrCwBJuBjtHqoN
+  db_.push_back(chunk);
+  ntt_db_.push_back(chunk);
 }
 
 void PirServer::preprocess_ntt() {
-  for (auto &plaintext : db_) {
-    if (plaintext.has_value()) {
-      evaluator_.transform_to_ntt_inplace(*plaintext, context_.first_parms_id());
+  // tutorial on Number Theoretic Transform (NTT): https://youtu.be/Pct3rS4Y0IA?si=25VrCwBJuBjtHqoN
+  for (DatabaseChunk &chunk : ntt_db_) {
+    for (auto &plaintext : chunk) {
+      if (plaintext.has_value()) {
+        seal::Plaintext pt = *plaintext;
+        evaluator_.transform_to_ntt_inplace(*plaintext, context_.first_parms_id());
+      }
     }
   }
 }

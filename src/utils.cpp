@@ -186,20 +186,28 @@ bool entry_is_equal(const Entry &entry1, const Entry &entry2) {
   return true;
 }
 
-size_t entry_idx_to_actual(const size_t entry_idx, const size_t fst_dim_sz, const size_t num_entries) {
-
+size_t entry_idx_to_actual(const size_t entry_idx, const size_t fst_dim_sz, const size_t db_sz) {
   // compute N / N_1
-  size_t other_dim_sz = num_entries / fst_dim_sz;
-
+  size_t other_dim_sz = db_sz / fst_dim_sz;
 
   // we remap (N/N_1) * k + j to k + j * N_1
   size_t k = entry_idx / other_dim_sz;
   size_t j = entry_idx % other_dim_sz;
-
-  DEBUG_PRINT("fst_dim_sz: " << fst_dim_sz);
-  DEBUG_PRINT("num_entries: " << num_entries);
-  DEBUG_PRINT("other_dim_sz: " << other_dim_sz);
-  DEBUG_PRINT("entry_idx: " << entry_idx << " k: " << k << " j: " << j);
-
   return k + j * fst_dim_sz;
+}
+
+void print_progress(size_t current, size_t total) {
+#ifdef _DEBUG
+  float progress = static_cast<float>(current) / total;
+  int bar_width = 70;
+  std::cout << "[";
+  int pos = static_cast<int>(bar_width * progress);
+  for (int i = 0; i < bar_width; ++i) {
+      if (i < pos) std::cout << "=";
+      else if (i == pos) std::cout << ">";
+      else std::cout << " ";
+  }
+  std::cout << "] " << int(progress * 100.0) << " %\r";
+  std::cout.flush();
+#endif
 }
