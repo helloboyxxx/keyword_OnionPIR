@@ -5,7 +5,8 @@
 #include "pir.h"
 #include <optional>
 
-typedef std::vector<std::optional<seal::Plaintext>> DatabaseChunk;  // 256 plaintexts
+// typedef std::vector<std::optional<seal::Plaintext>> DatabaseChunk;  // 256 plaintexts
+typedef std::unique_ptr<std::optional<seal::Plaintext>[]> DatabaseChunk;  // Heap allocation for N_1 plaintexts
 typedef std::vector<DatabaseChunk> Database;
 typedef std::pair<uint64_t, uint64_t> CuckooSeeds;
 

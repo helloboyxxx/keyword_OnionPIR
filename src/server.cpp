@@ -288,11 +288,25 @@ void PirServer::set_client_gsw_key(const uint32_t client_id, std::stringstream &
 
 
 seal::Plaintext PirServer::direct_get_pt(const uint64_t abstract_idx) {
+  // Calculate the actual index based on the abstract index
   auto actual_idx = entry_idx_to_actual(abstract_idx, dims_[0], DBSize_);
-  std::optional<seal::Plaintext> pt = db_.at(actual_idx / dims_[0]).at(actual_idx % dims_[0]);
+
+  // Get the chunk and index within the chunk
+  std::size_t chunk_idx = actual_idx / dims_[0];
+  std::size_t entry_idx = actual_idx % dims_[0];
+
+  // Access the DatabaseChunk (which is a unique_ptr to an array)
+  DatabaseChunk &chunk = db_.at(chunk_idx);  // Get the appropriate chunk
+
+  // Access the element within the chunk
+  std::optional<seal::Plaintext> &pt = chunk[entry_idx];  // Access the optional Plaintext
+
+  // Check if the optional holds a valid Plaintext
   if (pt.has_value()) {
-    return *pt;
+    return *pt;  // Return the Plaintext if it exists
   }
+
+  // If no valid Plaintext is found, throw an error
   throw std::invalid_argument("Entry not found");
 }
 
@@ -432,14 +446,21 @@ void PirServer::push_database_chunk(std::vector<Entry> &chunk_entry) {
     }
   }
 
-  DatabaseChunk chunk;
   size_t bits_per_coeff = pir_params_.get_num_bits_per_coeff();
   size_t num_coeffs = pir_params_.get_seal_params().poly_modulus_degree();
   size_t num_bits_per_plaintext = pir_params_.get_num_bits_per_plaintext();
   size_t num_entries_per_plaintext = pir_params_.get_num_entries_per_plaintext();
   size_t num_plaintexts = chunk_entry.size() / num_entries_per_plaintext;  // number of plaintexts in the new chunk
-
   const uint128_t coeff_mask = (uint128_t(1) << (bits_per_coeff)) - 1;  // bits_per_coeff many 1s
+  
+  auto fst_dim_sz = dims_[0];
+  DatabaseChunk chunk = std::make_unique<std::optional<seal::Plaintext>[]>(fst_dim_sz);
+  DatabaseChunk chunk_copy = std::make_unique<std::optional<seal::Plaintext>[]>(fst_dim_sz);
+
+  // init chunk with empty plaintexts({})
+  for (size_t i = 0; i < fst_dim_sz; i++) {
+    chunk[i] = std::nullopt;
+  }
 
   // Now we handle plaintexts one by one.
   for (int i = 0; i < num_plaintexts; i++) {
@@ -455,8 +476,7 @@ void PirServer::push_database_chunk(std::vector<Entry> &chunk_entry) {
     }
 
     if (additive_sum_size == 0) {
-      chunk.push_back({});  // push an empty std::optional<seal::Plaintext>. {} is equivalent to std::nullopt
-      continue;
+      continue; // leave std::nullopt in the chunk if the plaintext is empty.
     }
 
     int index = 0;  // index for the current coefficient to be filled
@@ -485,27 +505,22 @@ void PirServer::push_database_chunk(std::vector<Entry> &chunk_entry) {
       plaintext[index] = data_buffer & coeff_mask;
       index++;
     }
-    chunk.push_back(plaintext);
+    chunk[i] = plaintext;
+    chunk_copy[i] = plaintext;
   }
 
-  // Pad database with plaintext of 1s until DBSize_
-  // ? Why {} is equal to 1? Guess: {} will be treated as 1 during the multiplication of polynomial.
-  // Since we have reserved enough spaces for DBSize_ elements, this won't result in reallocations
-  for (size_t i = db_.size(); i < DBSize_; i++) {
-    chunk.push_back({});
-  }
-
-  db_.push_back(chunk);
-  ntt_db_.push_back(chunk);
+  db_.push_back(std::move(chunk));
+  ntt_db_.push_back(std::move(chunk_copy));
 }
 
 void PirServer::preprocess_ntt() {
   // tutorial on Number Theoretic Transform (NTT): https://youtu.be/Pct3rS4Y0IA?si=25VrCwBJuBjtHqoN
+  const size_t chunk_size = dims_[0];
   for (DatabaseChunk &chunk : ntt_db_) {
-    for (auto &plaintext : chunk) {
-      if (plaintext.has_value()) {
-        seal::Plaintext pt = *plaintext;
-        evaluator_.transform_to_ntt_inplace(*plaintext, context_.first_parms_id());
+    for (std::size_t i = 0; i < chunk_size; ++i) {
+      if (chunk[i].has_value()) {
+        seal::Plaintext &pt = chunk[i].value();
+        evaluator_.transform_to_ntt_inplace(pt, context_.first_parms_id());
       }
     }
   }
