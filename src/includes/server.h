@@ -5,6 +5,8 @@
 #include "pir.h"
 #include <optional>
 
+#define RAW_DB_FILE "./rawDB.bin"
+
 // typedef std::vector<std::optional<seal::Plaintext>> DatabaseChunk;  // 256 plaintexts
 typedef std::unique_ptr<std::optional<seal::Plaintext>[]> DatabaseChunk;  // Heap allocation for N_1 plaintexts
 typedef std::vector<DatabaseChunk> Database;
@@ -13,9 +15,11 @@ typedef std::pair<uint64_t, uint64_t> CuckooSeeds;
 class PirServer {
 public:
   PirServer(const PirParams &pir_params);
+  ~PirServer();
 
   /**
-   * @brief Generate random data for the server database.
+   * Generate random data for the server database and directly set the database.
+   * It pushes the data to the database in chunks.
    */
   void gen_data();
 
@@ -25,12 +29,6 @@ public:
    * @return a copy of the generated database and all used seeds. The last pair of CuckooSeeds is the seeds used for the cuckoo hash.
    */
   std::vector<CuckooSeeds> gen_keyword_data(size_t max_iter, uint64_t keyword_seed);
-
-  /**
-   * @brief Sets the server database using the provided vector of entries
-   * @param new_db 
-   */
-  void set_database(std::vector<Entry> &new_db);
 
   // push one chunk of entry to the database
   void push_database_chunk(std::vector<Entry> &chunk_entry);
@@ -59,11 +57,11 @@ public:
   void set_client_gsw_key(const uint32_t client_id, std::stringstream &gsw_stream);
 
   /**
-  Asking the server to return the plaintext at the given (abstract) index.
+  Asking the server to return the entry at the given (abstract) index.
   This is not doing PIR. So this reveals the index to the server. This is
   only for testing purposes.
   */
-  seal::Plaintext direct_get_pt(const uint64_t index);
+  Entry direct_get_entry(const uint64_t index);
 
   seal::Decryptor *decryptor_;
 
@@ -77,7 +75,6 @@ private:
   std::map<uint32_t, seal::GaloisKeys> client_galois_keys_;
   std::map<uint32_t, GSWCiphertext> client_gsw_keys_;
   Database db_;
-  Database ntt_db_;
   PirParams pir_params_;
   size_t hashed_key_width_;
 
@@ -97,6 +94,9 @@ private:
     This speeds up computation but takes up more memory.
   */
   void preprocess_ntt();
+
+  // write one chunk of the database to a binary file in CACHE_DIR
+  void write_one_chunk(std::vector<Entry> &chunk);
 };
 
 // ================== HELPER FUNCTIONS ==================

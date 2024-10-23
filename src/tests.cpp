@@ -324,8 +324,7 @@ void test_pir() {
 
     // ===================== ONLINE PHASE =====================
     // Client start generating query
-    // size_t entry_index = rand() % pir_params.get_num_entries();
-    size_t entry_index = 25;
+    size_t entry_index = rand() % pir_params.get_num_entries();
     BENCH_PRINT("Experiment [" << i << "]");
     DEBUG_PRINT("\t\tClient ID:\t" << client_id);
     DEBUG_PRINT("\t\tEntry index:\t" << entry_index);
@@ -347,8 +346,7 @@ void test_pir() {
 
 
     // Directly get the plaintext from server. Not part of PIR.
-    Entry actual_data = client.get_entry_from_plaintext(
-        entry_index, server.direct_get_pt(entry_index));
+    Entry actual_entry = server.direct_get_entry(entry_index);
 
     // ============= PRINTING RESULTS ===============
     DEBUG_PRINT("\t\tGalois size:\t" << galois_key_size);
@@ -360,7 +358,7 @@ void test_pir() {
 
     server_time_sum += TIME_DIFF(s_start_time, s_end_time);
     client_time_sum += TIME_DIFF(c_start_time, c_end_time) - TIME_DIFF(s_start_time, s_end_time);
-    if (check_entry_idx(actual_data, entry_index) && entry_is_equal(entry, actual_data)) {
+    if (check_entry_idx(actual_entry, entry_index) && entry_is_equal(entry, actual_entry)) {
       // print a green success message
       std::cout << "\033[1;32mSuccess!\033[0m" << std::endl;
     } else {
@@ -369,8 +367,8 @@ void test_pir() {
 
       std::cout << "PIR Result:\t";
       print_entry(entry);
-      std::cout << "Actual Data:\t";
-      print_entry(actual_data);
+      std::cout << "Actual Entry:\t";
+      print_entry(actual_entry);
     }
     PRINT_BAR;
   }

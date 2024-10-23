@@ -6,6 +6,7 @@
 #include <memory>
 #include <stdexcept>
 #include <unordered_set>
+#include <fstream>
 
 // copy the pir_params and set evaluator equal to the context_. 
 // client_galois_keys_, client_gsw_keys_, and db_ are not set yet.
@@ -14,6 +15,10 @@ PirServer::PirServer(const PirParams &pir_params)
       DBSize_(pir_params.get_DBSize()), evaluator_(context_), dims_(pir_params.get_dims()),
       hashed_key_width_(pir_params_.get_hashed_key_width()) { }
 
+PirServer::~PirServer() {
+  // delete the raw_db_file
+  std::remove(RAW_DB_FILE);
+}
 
 
 Entry generate_entry(const uint64_t id, const size_t entry_size) {
@@ -61,6 +66,7 @@ void PirServer::gen_data() {
     for (size_t k = 0; k < fst_dim_sz; ++k) {
       one_chunk[k] = generate_entry(other_dim_sz * k + j, pir_params_.get_entry_size());
     }
+    write_one_chunk(one_chunk);
     push_database_chunk(one_chunk);
     print_progress(j+1, other_dim_sz);  // DEBUG ONLY
   }
@@ -161,9 +167,9 @@ PirServer::evaluate_first_dim(std::vector<seal::Ciphertext> &selection_vector) {
     // summing C_{BFV_k} * DB_{N_1 * j + k}
     for (size_t k = 0; k < fst_dim_sz; k++) {
       for (size_t poly_id = 0; poly_id < encrypted_ntt_size; poly_id++) {
-        if (ntt_db_[j][k].has_value()) { // if the entry is not empty
+        if (db_[j][k].has_value()) { // if the entry is not empty
           utils::multiply_poly_acum(selection_vector[k].data(poly_id),
-                                    (*ntt_db_[j][k]).data(),
+                                    (*db_[j][k]).data(),
                                     coeff_val_cnt, buffer[poly_id].data()); 
         }
       }
@@ -287,27 +293,25 @@ void PirServer::set_client_gsw_key(const uint32_t client_id, std::stringstream &
 
 
 
-seal::Plaintext PirServer::direct_get_pt(const uint64_t abstract_idx) {
+Entry PirServer::direct_get_entry(const uint64_t abstract_idx) {
   // Calculate the actual index based on the abstract index
   auto actual_idx = entry_idx_to_actual(abstract_idx, dims_[0], DBSize_);
 
-  // Get the chunk and index within the chunk
-  std::size_t chunk_idx = actual_idx / dims_[0];
-  std::size_t entry_idx = actual_idx % dims_[0];
-
-  // Access the DatabaseChunk (which is a unique_ptr to an array)
-  DatabaseChunk &chunk = db_.at(chunk_idx);  // Get the appropriate chunk
-
-  // Access the element within the chunk
-  std::optional<seal::Plaintext> &pt = chunk[entry_idx];  // Access the optional Plaintext
-
-  // Check if the optional holds a valid Plaintext
-  if (pt.has_value()) {
-    return *pt;  // Return the Plaintext if it exists
+  // read the entry from raw_db_file
+  std::ifstream in_file(RAW_DB_FILE, std::ios::binary);
+  if (!in_file.is_open()) {
+    throw std::invalid_argument("Unable to open file for reading");
   }
 
-  // If no valid Plaintext is found, throw an error
-  throw std::invalid_argument("Entry not found");
+  // Seek to the correct position to the plaintext in the file
+  in_file.seekg(actual_idx * pir_params_.get_entry_size());
+
+  // Read the entry from the file
+  Entry entry(pir_params_.get_entry_size());
+  in_file.read(reinterpret_cast<char *>(entry.data()), pir_params_.get_entry_size());
+  in_file.close();
+
+  return entry;
 }
 
 
@@ -505,24 +509,36 @@ void PirServer::push_database_chunk(std::vector<Entry> &chunk_entry) {
       plaintext[index] = data_buffer & coeff_mask;
       index++;
     }
-    chunk[i] = plaintext;
-    chunk_copy[i] = plaintext;
+    chunk[i] = std::move(plaintext);
   }
 
   db_.push_back(std::move(chunk));
-  ntt_db_.push_back(std::move(chunk_copy));
 }
 
 void PirServer::preprocess_ntt() {
   // tutorial on Number Theoretic Transform (NTT): https://youtu.be/Pct3rS4Y0IA?si=25VrCwBJuBjtHqoN
   const size_t chunk_size = dims_[0];
-  for (DatabaseChunk &chunk : ntt_db_) {
+  for (DatabaseChunk &chunk : db_) {
     for (std::size_t i = 0; i < chunk_size; ++i) {
       if (chunk[i].has_value()) {
         seal::Plaintext &pt = chunk[i].value();
         evaluator_.transform_to_ntt_inplace(pt, context_.first_parms_id());
       }
     }
+  }
+}
+
+void PirServer::write_one_chunk(std::vector<Entry> &data) {
+  // write the database to a binary file in CACHE_DIR
+  std::string filename = std::string(RAW_DB_FILE);
+  std::ofstream out_file(filename, std::ios::binary | std::ios::app); // append to the file
+  if (out_file.is_open()) {
+    for (auto &entry : data) {
+      out_file.write(reinterpret_cast<const char *>(entry.data()), entry.size());
+    }
+    out_file.close();
+  } else {
+    std::cerr << "Unable to open file for writing" << std::endl;
   }
 }
 
