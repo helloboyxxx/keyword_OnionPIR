@@ -93,8 +93,5 @@ private:
 
 // ================== HELPER FUNCTIONS ==================
 
-void print_entry(Entry entry);
-
-
 // Given a key_id and the hashed_key_width, generate a random key using random number generator.
 std::vector<uint8_t> gen_single_key(uint64_t key_id, size_t hashed_key_width);

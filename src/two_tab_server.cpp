@@ -85,7 +85,7 @@ CuckooInitData PirServer::gen_keyword_data(size_t max_iter, uint64_t keyword_see
       for (size_t j = 0; j < pir_params_.get_num_entries(); ++j) {
         // Keyword(string) -> hash to fixed size bit string
         Key entry_key = keywords[j];
-        Entry entry = generate_entry_with_id(entry_key, entry_size, hashed_key_width);
+        Entry entry = generate_entry_with_key(entry_key, entry_size, hashed_key_width);
         size_t out1[4];
         MurmurHash3_x86_128(&entry_key, sizeof(entry_key), seed1, out1);
         size_t index1 = out1[0] % half_size;
@@ -222,14 +222,14 @@ PirServer::evaluate_first_dim(std::vector<seal::Ciphertext> &selection_vector) {
 
   for (int i = 0; i < size_of_other_dims; i++) {
     seal::Ciphertext cipher_result;
-    evaluator_.multiply_plain(selection_vector[0], *db_[i], cipher_result); // multiply the first selection vector with the first entry in the database
+    evaluator_.multiply_plain(selection_vector[0], *ntt_db_[i], cipher_result); // multiply the first selection vector with the first entry in the database
     result.push_back(cipher_result);  // store the result in the result vector
   }
 
   for (int i = 1; i < selection_vector.size(); i++) {
     for (int j = 0; j < size_of_other_dims; j++) {
       seal::Ciphertext cipher_result;
-      evaluator_.multiply_plain(selection_vector[i], *db_[i * size_of_other_dims + j],
+      evaluator_.multiply_plain(selection_vector[i], *ntt_db_[i * size_of_other_dims + j],
                                 cipher_result); // multiply the ith selection vector with the ith entry in the database
       evaluator_.add_inplace(result[j], cipher_result); // add the result to the previous result
     }
@@ -267,9 +267,9 @@ PirServer::evaluate_first_dim(std::vector<seal::Ciphertext> &selection_vector) {
     for (int i = 0; i < dims_[0]; i++) {
       // std::cout << "i: " << i << std::endl;
       for (size_t poly_id = 0; poly_id < encrypted_ntt_size; poly_id++) {
-        if (db_[col_id + i * size_of_other_dims].has_value()) { // if the entry is not empty
+        if (ntt_db_[col_id + i * size_of_other_dims].has_value()) { // if the entry is not empty
           utils::multiply_poly_acum(selection_vector[i].data(poly_id),
-                                    (*db_[col_id + i * size_of_other_dims]).data(),
+                                    (*ntt_db_[col_id + i * size_of_other_dims]).data(),
                                     coeff_count * coeff_mod_count, buffer[poly_id].data()); 
         }
       }
@@ -434,7 +434,7 @@ Entry generate_entry(int id, size_t entry_size) {
 }
 
 
-Entry generate_entry_with_id(uint64_t key_id, size_t entry_size, size_t hashed_key_width) {
+Entry generate_entry_with_key(uint64_t key_id, size_t entry_size, size_t hashed_key_width) {
   if (entry_size < hashed_key_width) {
     throw std::invalid_argument("Entry size is too small for the hashed key width");
   }
@@ -577,8 +577,8 @@ void PirServer::set_database(std::vector<Entry> &new_db, std::vector<Entry> &new
   size_t num_plaintexts = new_db.size() / num_entries_per_plaintext;  // number of real plaintexts in the new database
 
 
-  db_ = Database(); // create an empty database
-  db_.reserve(DBSize_); // reserve space for DBSize_ elements as it will always be padded below.
+  ntt_db_ = Database(); // create an empty database
+  ntt_db_.reserve(DBSize_); // reserve space for DBSize_ elements as it will always be padded below.
 
   const uint128_t coeff_mask = (uint128_t(1) << (bits_per_coeff)) - 1;  // bits_per_coeff many 1s
 
@@ -596,7 +596,7 @@ void PirServer::set_database(std::vector<Entry> &new_db, std::vector<Entry> &new
     }
 
     if (additive_sum_size == 0) {
-      db_.push_back({});  // push an empty std::optional<seal::Plaintext>. {} is equivalent to std::nullopt
+      ntt_db_.push_back({});  // push an empty std::optional<seal::Plaintext>. {} is equivalent to std::nullopt
       continue;
     }
 
@@ -626,14 +626,14 @@ void PirServer::set_database(std::vector<Entry> &new_db, std::vector<Entry> &new
       plaintext[index] = data_buffer & coeff_mask;
       index++;
     }
-    db_.push_back(plaintext);
+    ntt_db_.push_back(plaintext);
   }
 
   // Pad database with plaintext of 1s until DBSize_
   // ? Why {} is equal to 1? Guess: {} will be treated as 1 during the multiplication of polynomial.
   // Since we have reserved enough spaces for DBSize_ elements, this won't result in reallocations
-  for (size_t i = db_.size(); i < DBSize_; i++) {
-    db_.push_back({});
+  for (size_t i = ntt_db_.size(); i < DBSize_; i++) {
+    ntt_db_.push_back({});
   }
 
   num_plaintexts = new_db2.size() / num_entries_per_plaintext;  // number of real plaintexts in the new database

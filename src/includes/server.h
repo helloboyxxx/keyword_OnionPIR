@@ -5,36 +5,35 @@
 #include "pir.h"
 #include <optional>
 
-typedef std::vector<std::optional<seal::Plaintext>> Database;
+// typedef std::vector<std::optional<seal::Plaintext>> DatabaseChunk;  // 256 plaintexts
+typedef std::unique_ptr<std::optional<seal::Plaintext>[]> DatabaseChunk;  // Heap allocation for N_1 plaintexts
+typedef std::vector<DatabaseChunk> Database;
 typedef std::pair<uint64_t, uint64_t> CuckooSeeds;
-
-// struct for storing server public data after generating the database
-struct CuckooInitData {
-  std::vector<CuckooSeeds> used_seeds;  // all seeds used for constructing the cuckoo hash table
-  std::vector<Entry> inserted_data; // database containing all inserted entries
-};
 
 class PirServer {
 public:
   PirServer(const PirParams &pir_params);
 
   /**
-   * @brief Generate random data for the server database. Return the generated data for testing purposes.
+   * @brief Generate random data for the server database.
    */
-  std::vector<Entry> gen_data();
+  void gen_data();
 
   /**
    * @brief Generate random key-value pairs, configured using hashed_key_width_. 
    * Then set the database by inserting the key-value pairs using cuckoo hashing.
    * @return a copy of the generated database and all used seeds. The last pair of CuckooSeeds is the seeds used for the cuckoo hash.
    */
-  CuckooInitData gen_keyword_data(size_t max_iter, uint64_t keyword_seed);
+  std::vector<CuckooSeeds> gen_keyword_data(size_t max_iter, uint64_t keyword_seed);
 
   /**
    * @brief Sets the server database using the provided vector of entries
    * @param new_db 
    */
   void set_database(std::vector<Entry> &new_db);
+
+  // push one chunk of entry to the database
+  void push_database_chunk(std::vector<Entry> &chunk_entry);
 
   std::vector<uint64_t> get_dims() const;
 
@@ -59,6 +58,13 @@ public:
   void set_client_galois_key(const uint32_t client_id, std::stringstream &gsw_stream);
   void set_client_gsw_key(const uint32_t client_id, std::stringstream &gsw_stream);
 
+  /**
+  Asking the server to return the plaintext at the given (abstract) index.
+  This is not doing PIR. So this reveals the index to the server. This is
+  only for testing purposes.
+  */
+  seal::Plaintext direct_get_pt(const uint64_t index);
+
   seal::Decryptor *decryptor_;
 
   friend class PirTest;
@@ -71,6 +77,7 @@ private:
   std::map<uint32_t, seal::GaloisKeys> client_galois_keys_;
   std::map<uint32_t, GSWCiphertext> client_gsw_keys_;
   Database db_;
+  Database ntt_db_;
   PirParams pir_params_;
   size_t hashed_key_width_;
 
@@ -101,7 +108,7 @@ private:
 * @param len length(size) of the entry. Each entry is a vector of bytes.
 * @return Entry 
 */
-Entry generate_entry(int id, size_t entry_size);
+Entry generate_entry(const uint64_t id, const size_t entry_size);
 
 /**
  * @brief Generate an entry with a key_id. This will be used as a seed for
@@ -111,7 +118,7 @@ Entry generate_entry(int id, size_t entry_size);
  * entry_size - hashed_key_width = value_size is the only limit for the generated value.
  * @return Entry
  */
-Entry generate_entry_with_id(uint64_t key_id, size_t entry_size, size_t hashed_key_width);
+Entry generate_entry_with_key(uint64_t key_id, size_t entry_size, size_t hashed_key_width);
 
 
 /**

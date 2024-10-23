@@ -9,15 +9,15 @@
 #include <random>
 
 // "Default" Parameters for the PIR scheme
-#define DB_SZ             1 << 10       // Database size <==> Number of plaintexts in the database
-#define NUM_ENTRIES       1 << 10       // Number of entries in the database, can be less than DB_SZ
+#define DB_SZ             1 << 15       // Database size <==> Number of plaintexts in the database
+#define NUM_ENTRIES       1 << 15       // Number of entries in the database, can be less than DB_SZ
 #define GSW_L             5             // Parameter for GSW scheme. 
 #define GSW_L_KEY         15            // GSW for query expansion
 #define FST_DIM_SZ        256           // Number of dimensions of the hypercube
 #define PT_MOD_WIDTH      48            // Width of the plain modulus 
 #define CT_MODS	         {60, 60, 60}  // Coeff modulus for the BFV scheme
 
-#define EXPERIMENT_ITERATIONS 5
+#define EXPERIMENT_ITERATIONS 10
 
 void print_func_name(std::string func_name) {
 #ifdef _DEBUG
@@ -39,7 +39,6 @@ void run_tests() {
   // serialization_example();
 
   test_pir();
-  // find_pt_mod_width();
   // find_best_params();
   // test_cuckoo_keyword_pir(); // single server version
 
@@ -300,7 +299,7 @@ void test_pir() {
 
   BENCH_PRINT("Initializing server...");
   // Data to be stored in the database.
-  std::vector<Entry> data = server.gen_data();
+  server.gen_data();
   BENCH_PRINT("Server initialized");
 
   // Run the query process many times.
@@ -325,7 +324,8 @@ void test_pir() {
 
     // ===================== ONLINE PHASE =====================
     // Client start generating query
-    size_t entry_index = rand() % pir_params.get_num_entries();
+    // size_t entry_index = rand() % pir_params.get_num_entries();
+    size_t entry_index = 25;
     BENCH_PRINT("Experiment [" << i << "]");
     DEBUG_PRINT("\t\tClient ID:\t" << client_id);
     DEBUG_PRINT("\t\tEntry index:\t" << entry_index);
@@ -344,7 +344,13 @@ void test_pir() {
     auto decrypted_result = client.decrypt_result(result);
     Entry entry = client.get_entry_from_plaintext(entry_index, decrypted_result[0]);
     auto c_end_time = CURR_TIME;
-    
+
+
+    // Directly get the plaintext from server. Not part of PIR.
+    Entry actual_data = client.get_entry_from_plaintext(
+        entry_index, server.direct_get_pt(entry_index));
+
+    // ============= PRINTING RESULTS ===============
     DEBUG_PRINT("\t\tGalois size:\t" << galois_key_size);
     DEBUG_PRINT("\t\tGSW key size:\t" << gsw_key_size);
     DEBUG_PRINT("\t\tQuery size:\t" << query_size);
@@ -354,17 +360,17 @@ void test_pir() {
 
     server_time_sum += TIME_DIFF(s_start_time, s_end_time);
     client_time_sum += TIME_DIFF(c_start_time, c_end_time) - TIME_DIFF(s_start_time, s_end_time);
-    if (entry == data[entry_index]) {
+    if (check_entry_idx(actual_data, entry_index) && entry_is_equal(entry, actual_data)) {
       // print a green success message
       std::cout << "\033[1;32mSuccess!\033[0m" << std::endl;
     } else {
       // print a red failure message
       std::cout << "\033[1;31mFailure!\033[0m" << std::endl;
 
-      std::cout << "Result:\t";
+      std::cout << "PIR Result:\t";
       print_entry(entry);
-      std::cout << "Data:\t";
-      print_entry(data[entry_index]);
+      std::cout << "Actual Data:\t";
+      print_entry(actual_data);
     }
     PRINT_BAR;
   }
@@ -373,259 +379,99 @@ void test_pir() {
   std::cout << "Average client time: " << client_time_sum / EXPERIMENT_ITERATIONS << " ms" << std::endl;
 }
 
-void test_cuckoo_keyword_pir() {
-  print_func_name(__FUNCTION__);
-  const int experiment_times = 1;
 
-  const float blowup_factor = 2.0;
-  const size_t hashed_key_width = 16;
-  const size_t DBSize_ = 1 << 16;
-  const size_t num_entries = 1 << 16;
-  PirParams pir_params(DBSize_, FST_DIM_SZ, num_entries, GSW_L, GSW_L_KEY, PT_MOD_WIDTH, CT_MODS, hashed_key_width, blowup_factor);
-  pir_params.print_values();
-  PirServer server(pir_params);
+// void find_best_params() {
+//   print_func_name(__FUNCTION__);
 
-  DEBUG_PRINT("Initializing server...");
-  uint64_t keyword_seed = 123123;
-  CuckooInitData keyword_data = server.gen_keyword_data(100, keyword_seed);
+//   // open a file to write the results
+//   std::ofstream file;
+//   file.open("../outputs/best_param.txt");
+//   file << "l, l_key, server_time, all_success" << std::endl;
 
-  if (keyword_data.inserted_data.size() == 0) {
-    DEBUG_PRINT("Failed to insert data into cuckoo table. Exiting...");
-    return;
-  }
-  // Now we do have a cuckoo table with data inserted.
-  CuckooSeeds last_seeds = keyword_data.used_seeds.back();
-  uint64_t seed1 = last_seeds.first;
-  uint64_t seed2 = last_seeds.second;
-  DEBUG_PRINT("Seed1: " << seed1 << " Seed2: " << seed2);
-  
-  DEBUG_PRINT("Initializing client...");
-  PirClient client(pir_params);
-  for (int i = 0; i < experiment_times; i++) {
-    srand(time(0));
-    const int client_id = rand();
-    DEBUG_PRINT("Client ID: " << client_id);
+//   for (size_t curr_l_key = 13; curr_l_key < 20; ++curr_l_key) {
+//     for (size_t curr_l = 7; curr_l < 13; ++curr_l) {
+//       // setting parameters for PIR scheme
+//       PirParams pir_params(DB_SZ, FST_DIM_SZ, NUM_ENTRIES, curr_l, curr_l_key,
+//                             PT_MOD_WIDTH, CT_MODS);
+//       pir_params.print_values();
+//       PirServer server(pir_params);
 
-    // Initialize the client
-    PirClient client(pir_params);
-    std::stringstream galois_key_stream, gsw_stream, data_stream;
+//       DEBUG_PRINT("Initializing server...");
+//       // Data to be stored in the database.
+//       std::vector<Entry> data = server.gen_data();
+//       DEBUG_PRINT("Server initialized");
 
-    // Client create galois keys and gsw keys and writes to the stream (to the server)
-    size_t galois_key_size = client.create_galois_keys(galois_key_stream);
-    size_t gsw_key_size = client.write_gsw_to_stream(
-        client.generate_gsw_from_key(), gsw_stream);
-    //--------------------------------------------------------------------------------
-    server.decryptor_ = client.get_decryptor();
-    // Server receives the gsw keys and galois keys and loads them when needed
-    server.set_client_galois_key(client_id, galois_key_stream);
-    server.set_client_gsw_key(client_id, gsw_stream);
-
-    // Generate a random keyword using keyword_seed. 
-    size_t wanted_keyword_idx = rand() % num_entries;
-    std::mt19937_64 rng(keyword_seed);
-    rng.discard(wanted_keyword_idx);
-    Key wanted_keyword = rng();
-    DEBUG_PRINT("Wanted keyword: " << wanted_keyword);
-
-    // client start generating keyword query
-    auto c_start_time = CURR_TIME;
-    std::vector<PirQuery> queries = client.generate_cuckoo_query(seed1, seed2, num_entries, wanted_keyword);
-    auto c_end_time = CURR_TIME;
-
-    // server start processing the query
-    auto s_start_time = CURR_TIME;
-    // we know that there is only two queries in the vector queries.
-    auto reply1 = server.make_query(client_id, std::move(queries[0]));
-    auto reply2 = server.make_query(client_id, std::move(queries[1]));
-    auto s_end_time = CURR_TIME;
-
-    // client start processing the reply
-    auto c2_start_time = CURR_TIME;
-    client.cuckoo_process_reply(seed1, seed2, num_entries, wanted_keyword, reply1, reply2);
-    auto c2_end_time = CURR_TIME;
-
-    DEBUG_PRINT("Server Time: " << TIME_DIFF(s_start_time, s_end_time) << " ms");
-    DEBUG_PRINT("Client Time: " << TIME_DIFF(c_start_time, c_end_time) + TIME_DIFF(c2_start_time, c2_end_time) << " ms");
-    DEBUG_PRINT("Noise budget left: " << client.get_decryptor()->invariant_noise_budget(reply1[0]));
-    DEBUG_PRINT("Noise budget left: " << client.get_decryptor()->invariant_noise_budget(reply2[0]));
-
-  }
-
-
-}
-
-
-
-void find_pt_mod_width() {
-  print_func_name(__FUNCTION__);
-
-  // open a file to write the results
-  std::ofstream file;
-  file.open("../outputs/best_pt_mod.txt");
-  file << "pt_mod_width, server_time, success_rate" << std::endl;
-
-  for (size_t bit_width = 40; bit_width < 61; ++bit_width) {
-    // setting parameters for PIR scheme
-    PirParams pir_params(DB_SZ, FST_DIM_SZ, NUM_ENTRIES, GSW_L, GSW_L_KEY, bit_width, CT_MODS);
-    pir_params.print_values();
-    PirServer server(pir_params); // Setup server params
-
-    std::cout << "Initializing server..." << std::endl;
-    // Radomly generate data to be stored in the database.
-    std::vector<Entry> data = server.gen_data();
-
-    auto server_time_sum = 0;
-    size_t success_cnt = 0;
-    // Run the query process many times.
-    for (int i = 0; i < EXPERIMENT_ITERATIONS; i++) {
-      srand(time(0)); // reset the seed for the random number generator
-      // Initialize the client
-      PirClient client(pir_params);
-      const int client_id = rand();
-      std::stringstream galois_key_stream, gsw_stream, data_stream;
-
-      // Client create galois keys and gsw keys and writes to the stream (to the server)
-      size_t galois_key_size = client.create_galois_keys(galois_key_stream);
-      size_t gsw_key_size = client.write_gsw_to_stream(
-          client.generate_gsw_from_key(), gsw_stream);
-      //--------------------------------------------------------------------------------
-      server.decryptor_ = client.get_decryptor();
-      // Server receives the gsw keys and galois keys and loads them when needed
-      server.set_client_galois_key(client_id, galois_key_stream);
-      server.set_client_gsw_key(client_id, gsw_stream);
-
-      // === Client start generating query ===
-      size_t entry_index = rand() % pir_params.get_num_entries();
-      auto query = client.generate_query(entry_index);
-
-      auto s_start_time =
-          CURR_TIME; // server start time for processing the query
-      auto result = server.make_query(client_id, std::move(query));
-      auto s_end_time = CURR_TIME;
-
-      // client gets result from the server and decrypts it
-      auto decrypted_result = client.decrypt_result(result);
-      Entry entry =
-          client.get_entry_from_plaintext(entry_index, decrypted_result[0]);
-
-      // ================== Record the results ==================
-      std::cout << "Experiment [" << i
-                << "]\tServer time: " << TIME_DIFF(s_start_time, s_end_time)
-                << " ms" << std::endl;
-      server_time_sum += TIME_DIFF(s_start_time, s_end_time);
-
-      if (entry == data[entry_index]) {
-        // print a green success message
-        std::cout << "\033[1;32mSuccess!\033[0m" << std::endl;
-        success_cnt++;
-      } else {
-        // print a red failure message
-        std::cout << "\033[1;31mFailure!\033[0m" << std::endl;
-        break;
-      }
-    }
-    
-    // record the data
-    // bit_width, mod, success_rate, average server time
-    file << bit_width << " " << server_time_sum / EXPERIMENT_ITERATIONS << " "
-         << (double)success_cnt / (double)EXPERIMENT_ITERATIONS << std::endl;
-  }
-}
-
-
-
-void find_best_params() {
-  print_func_name(__FUNCTION__);
-
-  // open a file to write the results
-  std::ofstream file;
-  file.open("../outputs/best_param.txt");
-  file << "l, l_key, server_time, all_success" << std::endl;
-
-  for (size_t curr_l_key = 13; curr_l_key < 20; ++curr_l_key) {
-    for (size_t curr_l = 7; curr_l < 13; ++curr_l) {
-      // setting parameters for PIR scheme
-      PirParams pir_params(DB_SZ, FST_DIM_SZ, NUM_ENTRIES, curr_l, curr_l_key,
-                            PT_MOD_WIDTH, CT_MODS);
-      pir_params.print_values();
-      PirServer server(pir_params);
-
-      DEBUG_PRINT("Initializing server...");
-      // Data to be stored in the database.
-      std::vector<Entry> data = server.gen_data();
-      DEBUG_PRINT("Server initialized");
-
-      auto server_time_sum = 0;
-      bool all_success = true;
-      int end_iter = EXPERIMENT_ITERATIONS;
-      // Run the query process many times.
-      for (int i = 0; i < EXPERIMENT_ITERATIONS; i++) {
+//       auto server_time_sum = 0;
+//       bool all_success = true;
+//       int end_iter = EXPERIMENT_ITERATIONS;
+//       // Run the query process many times.
+//       for (int i = 0; i < EXPERIMENT_ITERATIONS; i++) {
         
-        // ============= OFFLINE PHASE ==============
-        // Initialize the client
-        PirClient client(pir_params);
-        const int client_id = rand();
-        std::stringstream galois_key_stream, gsw_stream, data_stream;
+//         // ============= OFFLINE PHASE ==============
+//         // Initialize the client
+//         PirClient client(pir_params);
+//         const int client_id = rand();
+//         std::stringstream galois_key_stream, gsw_stream, data_stream;
 
-        // Client create galois keys and gsw keys and writes to the stream (to the server)
-        size_t galois_key_size = client.create_galois_keys(galois_key_stream);
-        size_t gsw_key_size = client.write_gsw_to_stream(
-            client.generate_gsw_from_key(), gsw_stream);
-        //--------------------------------------------------------------------------------
-        server.decryptor_ = client.get_decryptor();
-        // Server receives the gsw keys and galois keys and loads them when needed
-        server.set_client_galois_key(client_id, galois_key_stream);
-        server.set_client_gsw_key(client_id, gsw_stream);
+//         // Client create galois keys and gsw keys and writes to the stream (to the server)
+//         size_t galois_key_size = client.create_galois_keys(galois_key_stream);
+//         size_t gsw_key_size = client.write_gsw_to_stream(
+//             client.generate_gsw_from_key(), gsw_stream);
+//         //--------------------------------------------------------------------------------
+//         server.decryptor_ = client.get_decryptor();
+//         // Server receives the gsw keys and galois keys and loads them when needed
+//         server.set_client_galois_key(client_id, galois_key_stream);
+//         server.set_client_gsw_key(client_id, gsw_stream);
 
-        // ===================== ONLINE PHASE =====================
-        // Client start generating query
-        size_t entry_index = rand() % pir_params.get_num_entries();
+//         // ===================== ONLINE PHASE =====================
+//         // Client start generating query
+//         size_t entry_index = rand() % pir_params.get_num_entries();
 
-        // ============= CLIENT ===============
-        PirQuery query = client.generate_query(entry_index);
-        auto query_size = client.write_query_to_stream(query, data_stream);
+//         // ============= CLIENT ===============
+//         PirQuery query = client.generate_query(entry_index);
+//         auto query_size = client.write_query_to_stream(query, data_stream);
         
-        // ============= SERVER ===============
-        auto s_start_time = CURR_TIME;  // server start time for processing the query
-        auto result = server.make_seeded_query(client_id, data_stream);
-        auto s_end_time = CURR_TIME;
+//         // ============= SERVER ===============
+//         auto s_start_time = CURR_TIME;  // server start time for processing the query
+//         auto result = server.make_seeded_query(client_id, data_stream);
+//         auto s_end_time = CURR_TIME;
         
-        // client gets result from the server and decrypts it
-        auto decrypted_result = client.decrypt_result(result);
-        Entry entry = client.get_entry_from_plaintext(entry_index, decrypted_result[0]);
+//         // client gets result from the server and decrypts it
+//         auto decrypted_result = client.decrypt_result(result);
+//         Entry entry = client.get_entry_from_plaintext(entry_index, decrypted_result[0]);
 
-        // ================== Record the results ==================
-        std::cout << "Experiment [" << i
-                  << "]\tServer time: " << TIME_DIFF(s_start_time, s_end_time)
-                  << " ms" << std::endl;
-        server_time_sum += TIME_DIFF(s_start_time, s_end_time);
+//         // ================== Record the results ==================
+//         std::cout << "Experiment [" << i
+//                   << "]\tServer time: " << TIME_DIFF(s_start_time, s_end_time)
+//                   << " ms" << std::endl;
+//         server_time_sum += TIME_DIFF(s_start_time, s_end_time);
 
-        if (entry == data[entry_index]) {
-          // print a green success message
-          std::cout << "\033[1;32mSuccess!\033[0m" << std::endl;
-        } else {
-          // print a red failure message
-          std::cout << "\033[1;31mFailure!\033[0m" << std::endl;
-          all_success = false;
-          end_iter = i + 1;
-          break;
-        }
-      }
+//         if (entry == data[entry_index]) {
+//           // print a green success message
+//           std::cout << "\033[1;32mSuccess!\033[0m" << std::endl;
+//         } else {
+//           // print a red failure message
+//           std::cout << "\033[1;31mFailure!\033[0m" << std::endl;
+//           all_success = false;
+//           end_iter = i + 1;
+//           break;
+//         }
+//       }
 
-      // record the data
-      file << curr_l << " " << curr_l_key << " "
-            << server_time_sum / end_iter << " "
-            << " " << all_success << std::endl;
+//       // record the data
+//       file << curr_l << " " << curr_l_key << " "
+//             << server_time_sum / end_iter << " "
+//             << " " << all_success << std::endl;
 
-      std::cout << "Average server time: " << server_time_sum / end_iter
-                << " ms" << std::endl;
-    }
-  }
+//       std::cout << "Average server time: " << server_time_sum / end_iter
+//                 << " ms" << std::endl;
+//     }
+//   }
 
-  // close the file
-  file.close();
+//   // close the file
+//   file.close();
 
-}
+// }
 
 void test_prime_gen() {
   print_func_name(__FUNCTION__);
