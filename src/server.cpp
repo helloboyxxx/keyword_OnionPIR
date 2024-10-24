@@ -13,7 +13,10 @@
 PirServer::PirServer(const PirParams &pir_params)
     : pir_params_(pir_params), context_(pir_params.get_seal_params()),
       DBSize_(pir_params.get_DBSize()), evaluator_(context_), dims_(pir_params.get_dims()),
-      hashed_key_width_(pir_params_.get_hashed_key_width()) { }
+      hashed_key_width_(pir_params_.get_hashed_key_width()) {
+  // delete the raw_db_file if it exists
+  std::remove(RAW_DB_FILE);
+}
 
 PirServer::~PirServer() {
   // delete the raw_db_file
@@ -422,6 +425,8 @@ std::vector<seal::Ciphertext> PirServer::make_query(const uint32_t client_id, Pi
   BENCH_PRINT("\t\tConvert time:\t" << TIME_DIFF(convert_start, convert_end) << "ms");
   BENCH_PRINT("\t\tFirst dim time:\t" << TIME_DIFF(first_dim_start, first_dim_end) << "ms");
   BENCH_PRINT("\t\tOther dim time:\t" << TIME_DIFF(other_dim_start, other_dim_end) << "ms");
+  BENCH_PRINT("\t\tNoise before:\t" << noise_before << " bits");
+  BENCH_PRINT("\t\tNoise after:\t" << noise_after << " bits");
 
   return result;
 }

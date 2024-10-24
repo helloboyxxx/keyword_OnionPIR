@@ -7,15 +7,16 @@
 #include <fstream>
 #include <iostream>
 #include <random>
+#include <bitset>
 
 // "Default" Parameters for the PIR scheme
-#define DB_SZ             1 << 15       // Database size <==> Number of plaintexts in the database
-#define NUM_ENTRIES       1 << 15       // Number of entries in the database, can be less than DB_SZ
-#define GSW_L             5             // Parameter for GSW scheme. 
-#define GSW_L_KEY         15            // GSW for query expansion
+#define DB_SZ             1 << 10       // Database size <==> Number of plaintexts in the database
+#define NUM_ENTRIES       1 << 10       // Number of entries in the database, can be less than DB_SZ
+#define GSW_L             3             // Parameter for GSW scheme. 
+#define GSW_L_KEY         15             // GSW for query expansion
 #define FST_DIM_SZ        256           // Number of dimensions of the hypercube
 #define PT_MOD_WIDTH      48            // Width of the plain modulus 
-#define CT_MODS	         {60, 60, 60}  // Coeff modulus for the BFV scheme
+#define CT_MODS	         {60, 60, 60}   // Coeff modulus for the BFV scheme
 
 #define EXPERIMENT_ITERATIONS 10
 
@@ -325,7 +326,7 @@ void test_pir() {
     // ===================== ONLINE PHASE =====================
     // Client start generating query
     size_t entry_index = rand() % pir_params.get_num_entries();
-    BENCH_PRINT("Experiment [" << i << "]");
+    BENCH_PRINT("Experiment [" << i+1 << "]");
     DEBUG_PRINT("\t\tClient ID:\t" << client_id);
     DEBUG_PRINT("\t\tEntry index:\t" << entry_index);
 

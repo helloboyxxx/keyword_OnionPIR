@@ -197,7 +197,6 @@ size_t entry_idx_to_actual(const size_t entry_idx, const size_t fst_dim_sz, cons
 }
 
 void print_progress(size_t current, size_t total) {
-#ifdef _DEBUG
   float progress = static_cast<float>(current) / total;
   int bar_width = 70;
   std::cout << "[";
@@ -209,5 +208,4 @@ void print_progress(size_t current, size_t total) {
   }
   std::cout << "] " << int(progress * 100.0) << " %\r";
   std::cout.flush();
-#endif
 }
