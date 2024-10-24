@@ -7,15 +7,16 @@
 #include <fstream>
 #include <iostream>
 #include <random>
+#include <bitset>
 
 // "Default" Parameters for the PIR scheme
-#define DB_SZ             1 << 15       // Database size <==> Number of plaintexts in the database
-#define NUM_ENTRIES       1 << 15       // Number of entries in the database, can be less than DB_SZ
-#define GSW_L             5             // Parameter for GSW scheme. 
-#define GSW_L_KEY         15            // GSW for query expansion
+#define DB_SZ             1 << 10       // Database size <==> Number of plaintexts in the database
+#define NUM_ENTRIES       1 << 10       // Number of entries in the database, can be less than DB_SZ
+#define GSW_L             3             // Parameter for GSW scheme. 
+#define GSW_L_KEY         15             // GSW for query expansion
 #define FST_DIM_SZ        256           // Number of dimensions of the hypercube
 #define PT_MOD_WIDTH      48            // Width of the plain modulus 
-#define CT_MODS	         {60, 60, 60}  // Coeff modulus for the BFV scheme
+#define CT_MODS	         {60, 60, 60}   // Coeff modulus for the BFV scheme
 
 #define EXPERIMENT_ITERATIONS 10
 
@@ -324,9 +325,8 @@ void test_pir() {
 
     // ===================== ONLINE PHASE =====================
     // Client start generating query
-    // size_t entry_index = rand() % pir_params.get_num_entries();
-    size_t entry_index = 25;
-    BENCH_PRINT("Experiment [" << i << "]");
+    size_t entry_index = rand() % pir_params.get_num_entries();
+    BENCH_PRINT("Experiment [" << i+1 << "]");
     DEBUG_PRINT("\t\tClient ID:\t" << client_id);
     DEBUG_PRINT("\t\tEntry index:\t" << entry_index);
 
@@ -347,8 +347,7 @@ void test_pir() {
 
 
     // Directly get the plaintext from server. Not part of PIR.
-    Entry actual_data = client.get_entry_from_plaintext(
-        entry_index, server.direct_get_pt(entry_index));
+    Entry actual_entry = server.direct_get_entry(entry_index);
 
     // ============= PRINTING RESULTS ===============
     DEBUG_PRINT("\t\tGalois size:\t" << galois_key_size);
@@ -360,7 +359,7 @@ void test_pir() {
 
     server_time_sum += TIME_DIFF(s_start_time, s_end_time);
     client_time_sum += TIME_DIFF(c_start_time, c_end_time) - TIME_DIFF(s_start_time, s_end_time);
-    if (check_entry_idx(actual_data, entry_index) && entry_is_equal(entry, actual_data)) {
+    if (check_entry_idx(actual_entry, entry_index) && entry_is_equal(entry, actual_entry)) {
       // print a green success message
       std::cout << "\033[1;32mSuccess!\033[0m" << std::endl;
     } else {
@@ -369,8 +368,8 @@ void test_pir() {
 
       std::cout << "PIR Result:\t";
       print_entry(entry);
-      std::cout << "Actual Data:\t";
-      print_entry(actual_data);
+      std::cout << "Actual Entry:\t";
+      print_entry(actual_entry);
     }
     PRINT_BAR;
   }
