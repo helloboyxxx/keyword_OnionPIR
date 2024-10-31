@@ -49,10 +49,8 @@ public:
    * 
    * @param result The BFV ciphertexts
    * @param selection_cipher A single RGSW(b) ciphertext, where b \in {0, 1}. 0 to get the first half of the result, 1 to get the second half.
-   * @return std::vector<seal::Ciphertext> 
    */
-  std::vector<seal::Ciphertext> evaluate_gsw_product(std::vector<seal::Ciphertext> &result,
-                                                     GSWCiphertext &selection_cipher);
+  void evaluate_gsw_product(std::vector<seal::Ciphertext> &result, GSWCiphertext &selection_cipher);
   void set_client_galois_key(const uint32_t client_id, std::stringstream &gsw_stream);
   void set_client_gsw_key(const uint32_t client_id, std::stringstream &gsw_stream);
 

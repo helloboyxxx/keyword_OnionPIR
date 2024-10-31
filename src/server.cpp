@@ -170,11 +170,7 @@ PirServer::evaluate_first_dim(std::vector<seal::Ciphertext> &selection_vector) {
     // summing C_{BFV_k} * DB_{N_1 * j + k}
     for (size_t k = 0; k < fst_dim_sz; k++) {
       for (size_t poly_id = 0; poly_id < encrypted_ntt_size; poly_id++) {
-        if (db_[j][k].has_value()) { // if the entry is not empty
-          utils::multiply_poly_acum(selection_vector[k].data(poly_id),
-                                    (*db_[j][k]).data(),
-                                    coeff_val_cnt, buffer[poly_id].data()); 
-        }
+        utils::multiply_poly_acum(selection_vector[k].data(poly_id), (*db_[j][k]).data(), coeff_val_cnt, buffer[poly_id].data()); 
       }
     }
     ct_acc = selection_vector[0];
@@ -198,7 +194,7 @@ PirServer::evaluate_first_dim(std::vector<seal::Ciphertext> &selection_vector) {
   return result;
 }
 
-std::vector<seal::Ciphertext> PirServer::evaluate_gsw_product(std::vector<seal::Ciphertext> &result,
+void PirServer::evaluate_gsw_product(std::vector<seal::Ciphertext> &result,
                                                               GSWCiphertext &selection_cipher) {
   
   /**
@@ -212,21 +208,14 @@ std::vector<seal::Ciphertext> PirServer::evaluate_gsw_product(std::vector<seal::
    * result = RGSW(b) * (y - x) + x, where "*" is the external product, "+" and "-" are homomorphic operations.
    */
   auto block_size = result.size() / 2;
-  std::vector<seal::Ciphertext> result_vector;
-  result_vector.reserve(block_size);
-
   auto ct_poly_size = result[0].size();
   for (int i = 0; i < block_size; i++) {
     evaluator_.sub_inplace(result[i + block_size], result[i]);  // y - x
     data_gsw.external_product(selection_cipher, result[i + block_size], ct_poly_size, result[i + block_size]);  // b * (y - x)
-    result_vector.emplace_back(result[i + block_size]); // hopefully emplace_back is faster than push_back
+    data_gsw.ciphertext_inverse_ntt(result[i + block_size]);
+    evaluator_.add_inplace(result[i], result[i + block_size]);  // x + b * (y - x)
   }
-
-  for (int j = 0; j < block_size; j++) {
-    data_gsw.ciphertext_inverse_ntt(result_vector[j]);
-    evaluator_.add_inplace(result_vector[j], result[j]);  // 
-  }
-  return result_vector;
+  result.resize(block_size);
 }
 
 // This function is using the algorithm 5 in Constant-weight PIR: Single-round Keyword PIR via Constant-weight Equality Operators.
@@ -411,7 +400,7 @@ std::vector<seal::Ciphertext> PirServer::make_query(const uint32_t client_id, Pi
   // Evaluate the other dimensions
   auto other_dim_start = CURR_TIME;
   for (int i = 1; i < dims_.size(); i++) {
-    result = evaluate_gsw_product(result, gsw_vec[i - 1]);
+    evaluate_gsw_product(result, gsw_vec[i - 1]);
   }
   auto other_dim_end = CURR_TIME;
 
@@ -425,8 +414,6 @@ std::vector<seal::Ciphertext> PirServer::make_query(const uint32_t client_id, Pi
   BENCH_PRINT("\t\tConvert time:\t" << TIME_DIFF(convert_start, convert_end) << "ms");
   BENCH_PRINT("\t\tFirst dim time:\t" << TIME_DIFF(first_dim_start, first_dim_end) << "ms");
   BENCH_PRINT("\t\tOther dim time:\t" << TIME_DIFF(other_dim_start, other_dim_end) << "ms");
-  BENCH_PRINT("\t\tNoise before:\t" << noise_before << " bits");
-  BENCH_PRINT("\t\tNoise after:\t" << noise_after << " bits");
 
   return result;
 }

@@ -89,6 +89,20 @@ inline void multiply_poly_acum(const uint64_t *ct_ptr, const uint64_t *pt_ptr, s
     multiply_acum(ct_ptr[cc + 31], pt_ptr[cc + 31], result[cc + 31]);
   }
 }
+
+// elementwise: multiply two 64-bit integers modulo modulus, store the result in a.
+inline avx_mult_mod(const uint64_t *vec_a, const uint64_t *vec_b, const __uint128_t *mod, const uint64_t size) {
+  for (int i = 0; i < size; i++) {
+    // cast a and b to 128-bit integers to avoid overflow
+    __uint128_t result = static_cast<__uint128_t>(a[i]) * static_cast<__uint128_t>(b[i]);
+    vec_a[i] = result % mod[i];
+  }
+}
+
+
+
+
+
 void negacyclic_shift_poly_coeffmod(seal::util::ConstCoeffIter poly, size_t coeff_count,
                                     size_t shift, const seal::Modulus &modulus,
                                     seal::util::CoeffIter result);
