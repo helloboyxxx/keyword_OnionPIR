@@ -71,9 +71,10 @@ void PirServer::gen_data() {
     }
     write_one_chunk(one_chunk);
     push_database_chunk(one_chunk);
-    print_progress(j+1, other_dim_sz);  // DEBUG ONLY
+    print_progress(j+1, other_dim_sz);
   }
   // transform the ntt_db_ from coefficient form to ntt form. db_ is not transformed.
+  BENCH_PRINT("Transforming the database to NTT form...");
   preprocess_ntt();
 }
 

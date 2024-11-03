@@ -13,12 +13,12 @@
 #define DB_SZ             1 << 16       // Database size <==> Number of plaintexts in the database
 #define NUM_ENTRIES       1 << 16       // Number of entries in the database, can be less than DB_SZ
 #define GSW_L             4             // Parameter for GSW scheme. 
-#define GSW_L_KEY         8             // GSW for query expansion
+#define GSW_L_KEY         9             // GSW for query expansion
 #define FST_DIM_SZ        256           // Number of dimensions of the hypercube
-#define PT_MOD_WIDTH      48            // Width of the plain modulus 
+#define PT_MOD_WIDTH      49            // Width of the plain modulus 
 #define CT_MODS	         {60, 60, 60}   // Coeff modulus for the BFV scheme
 
-#define EXPERIMENT_ITERATIONS 1
+#define EXPERIMENT_ITERATIONS 20
 
 void print_func_name(std::string func_name) {
 #ifdef _DEBUG
@@ -291,6 +291,7 @@ void test_pir() {
   print_func_name(__FUNCTION__);
   auto server_time_sum = 0;
   auto client_time_sum = 0;
+  auto success_count = 0;
   
   // ============== setting parameters for PIR scheme ==============
   PirParams pir_params(DB_SZ, FST_DIM_SZ, NUM_ENTRIES, GSW_L,
@@ -362,6 +363,7 @@ void test_pir() {
     if (check_entry_idx(actual_entry, entry_index) && entry_is_equal(entry, actual_entry)) {
       // print a green success message
       std::cout << "\033[1;32mSuccess!\033[0m" << std::endl;
+      success_count++;
     } else {
       // print a red failure message
       std::cout << "\033[1;31mFailure!\033[0m" << std::endl;
@@ -376,6 +378,7 @@ void test_pir() {
 
   std::cout << "Average server time: " << server_time_sum / EXPERIMENT_ITERATIONS << " ms" << std::endl;
   std::cout << "Average client time: " << client_time_sum / EXPERIMENT_ITERATIONS << " ms" << std::endl;
+  std::cout << "Success rate: " << success_count << "/" << EXPERIMENT_ITERATIONS << std::endl;
 }
 
 

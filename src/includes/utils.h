@@ -90,16 +90,6 @@ inline void multiply_poly_acum(const uint64_t *ct_ptr, const uint64_t *pt_ptr, s
   }
 }
 
-// elementwise: multiply two 64-bit integers modulo modulus, store the result in a.
-inline avx_mult_mod(const uint64_t *vec_a, const uint64_t *vec_b, const __uint128_t *mod, const uint64_t size) {
-  for (int i = 0; i < size; i++) {
-    // cast a and b to 128-bit integers to avoid overflow
-    __uint128_t result = static_cast<__uint128_t>(a[i]) * static_cast<__uint128_t>(b[i]);
-    vec_a[i] = result % mod[i];
-  }
-}
-
-
 
 
 

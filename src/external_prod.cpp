@@ -54,8 +54,8 @@ void GSWEval::external_product(GSWCiphertext const &gsw_enc, seal::Ciphertext co
   const auto &context_data = context->first_context_data();
   auto &parms2 = context_data->parms();
   auto &coeff_modulus = parms2.coeff_modulus();
-  size_t coeff_count = parms2.poly_modulus_degree();
-  size_t coeff_mod_count = coeff_modulus.size();
+  size_t coeff_count = parms2.poly_modulus_degree();  // 4096
+  size_t coeff_mod_count = coeff_modulus.size();  // 2
   auto ntt_tables = context_data->small_ntt_tables();
 
   std::vector<std::vector<uint64_t>> decomposed_bfv;
@@ -125,11 +125,10 @@ void GSWEval::decomp_rlwe(seal::Ciphertext const &ct, std::vector<std::vector<ui
 
     for (int p = l - 1; p >= 0; p--) {
       std::vector<uint64_t> row = data;
-      const int shift_amount = p * base_log2;
 
       for (size_t k = 0; k < coeff_count; k++) {
         auto ptr = row.data() + k * coeff_mod_count;
-        seal::util::right_shift_uint(ptr, shift_amount, coeff_mod_count, ptr);
+        seal::util::right_shift_uint(ptr, p * base_log2, coeff_mod_count, ptr); // shift right by p * base_log2
         ptr[0] &= mask;
         for (int i = 1; i < coeff_mod_count; i++) {
           ptr[i] = 0;
@@ -138,10 +137,9 @@ void GSWEval::decomp_rlwe(seal::Ciphertext const &ct, std::vector<std::vector<ui
 
       rns_base->decompose_array(row.data(), coeff_count, pool);
 
-      output.push_back(std::move(row));
+      output.emplace_back(std::move(row));
     }
   }
-  // std::cout << "SIZE " << output.size() << std::endl;
 }
 
 void GSWEval::query_to_gsw(std::vector<seal::Ciphertext> query, GSWCiphertext gsw_key,
