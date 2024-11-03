@@ -74,6 +74,7 @@ private:
   std::map<uint32_t, GSWCiphertext> client_gsw_keys_;
   Database db_;
   PirParams pir_params_;
+  std::vector<uint64_t> mu_values_; // Barret reduction parameters
   size_t hashed_key_width_;
 
   /*!

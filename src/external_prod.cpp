@@ -89,7 +89,10 @@ void GSWEval::external_product(GSWCiphertext const &gsw_enc, seal::Ciphertext co
       auto mod_idx = (mod_id * coeff_count);
       auto mod = static_cast<uint64_t>(coeff_modulus[mod_id].value());
       for (int coeff_id = 0; coeff_id < coeff_count; coeff_id++) {
-        ct_ptr[coeff_id + mod_idx] = static_cast<uint64_t>(pt_ptr[coeff_id + mod_idx] % mod);
+        // ct_ptr[coeff_id + mod_idx] = static_cast<uint64_t>(pt_ptr[coeff_id + mod_idx] % mod);
+        auto x = pt_ptr[coeff_id + mod_idx];
+        uint64_t raw[2] = {static_cast<uint64_t>(x), static_cast<uint64_t>(x >> 64)};
+        ct_ptr[coeff_id + mod_idx] = util::barrett_reduce_128(raw, coeff_modulus[mod_id]);
       }
     }
   }

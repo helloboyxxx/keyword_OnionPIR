@@ -1,6 +1,7 @@
 #include "server.h"
 #include "external_prod.h"
 #include "utils.h"
+#include "seal/util/uintarithsmallmod.h"
 #include <cassert>
 #include <cstdlib>
 #include <memory>
@@ -16,6 +17,19 @@ PirServer::PirServer(const PirParams &pir_params)
       hashed_key_width_(pir_params_.get_hashed_key_width()) {
   // delete the raw_db_file if it exists
   std::remove(RAW_DB_FILE);
+  // // precompute the mu values for barret reduction
+
+  // const auto seal_params = context_.get_context_data(context_.first_parms_id())->parms();
+  // const auto &coeff_modulus = seal_params.coeff_modulus();
+  // size_t coeff_mod_count = coeff_modulus.size();
+  // DEBUG_PRINT("coeff 0: " << coeff_modulus[0].value());
+  // DEBUG_PRINT("coeff 1: " << coeff_modulus[1].value());
+  // for (int mod_id = 0; mod_id < coeff_mod_count; ++mod_id) {
+  //     int k = coeff_modulus[mod_id].bit_count() - 1; // k = n - 1
+  //     uint64_t mod = static_cast<uint64_t>(coeff_modulus[mod_id].value());
+  //     DEBUG_PRINT("k: " << k);
+  //     mu_values_[mod_id] = (1ULL << (2 * k)) / mod; // Precompute mu
+  // }
 }
 
 PirServer::~PirServer() {
@@ -182,9 +196,10 @@ PirServer::evaluate_first_dim(std::vector<seal::Ciphertext> &selection_vector) {
         auto mod_idx = (mod_id * coeff_count);
 
         for (int coeff_id = 0; coeff_id < coeff_count; coeff_id++) {
-          ct_ptr[coeff_id + mod_idx] =
-              pt_ptr[coeff_id + mod_idx] %
-              static_cast<__uint128_t>(coeff_modulus[mod_id].value());
+          // ct_ptr[coeff_id + mod_idx] = pt_ptr[coeff_id + mod_idx] % coeff_modulus[mod_id]
+          auto x = pt_ptr[coeff_id + mod_idx];
+          uint64_t raw[2] = {static_cast<uint64_t>(x), static_cast<uint64_t>(x >> 64)};
+          ct_ptr[coeff_id + mod_idx] = util::barrett_reduce_128(raw, coeff_modulus[mod_id]);
         }
       }
     }
