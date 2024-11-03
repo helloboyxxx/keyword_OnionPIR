@@ -10,15 +10,15 @@
 #include <bitset>
 
 // "Default" Parameters for the PIR scheme
-#define DB_SZ             1 << 15       // Database size <==> Number of plaintexts in the database
-#define NUM_ENTRIES       1 << 15       // Number of entries in the database, can be less than DB_SZ
+#define DB_SZ             1 << 18       // Database size <==> Number of plaintexts in the database
+#define NUM_ENTRIES       1 << 18       // Number of entries in the database, can be less than DB_SZ
 #define GSW_L             4             // Parameter for GSW scheme. 
 #define GSW_L_KEY         9             // GSW for query expansion
 #define FST_DIM_SZ        256           // Number of dimensions of the hypercube
 #define PT_MOD_WIDTH      49            // Width of the plain modulus 
 #define CT_MODS	         {60, 60, 60}   // Coeff modulus for the BFV scheme
 
-#define EXPERIMENT_ITERATIONS 10
+#define EXPERIMENT_ITERATIONS 20
 
 void print_func_name(std::string func_name) {
 #ifdef _DEBUG
@@ -155,7 +155,7 @@ void test_external_product() {
   size_t mult_rounds = 1;
 
   for (int i = 0; i < mult_rounds; i++) {
-    data_gsw.external_product(b_gsw, a_encrypted, coeff_count, a_encrypted);
+    data_gsw.external_product(b_gsw, a_encrypted, a_encrypted);
     data_gsw.ciphertext_inverse_ntt(a_encrypted);
     decryptor_.decrypt(a_encrypted, result);
     std::cout << "Noise budget after: " << decryptor_.invariant_noise_budget(a_encrypted)

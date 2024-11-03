@@ -18,7 +18,7 @@ public:
   */
 
   void external_product(GSWCiphertext const &gsw_enc, seal::Ciphertext const &bfv,
-                        size_t ct_poly_size, seal::Ciphertext &res_ct);
+                        seal::Ciphertext &res_ct);
 
   /*!
     Performs a gadget decomposition of a size 2 BFV ciphertext into 2 sets of

@@ -350,7 +350,7 @@ std::vector<seal::Ciphertext> PirServer::evaluate_gsw_product(std::vector<seal::
 
   for (int i = 0; i < block_size; i++) {
     evaluator_.sub_inplace(result[i], result[i + block_size]);
-    data_gsw.external_product(selection_cipher, result[i], result[0].size(), result[i]);
+    data_gsw.external_product(selection_cipher, result[i], result[i]);
     result_vector.push_back(result[i]);
   }
 

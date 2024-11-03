@@ -49,14 +49,14 @@ void GSWEval::ciphertext_inverse_ntt(seal::Ciphertext &ct) {
 }
 
 void GSWEval::external_product(GSWCiphertext const &gsw_enc, seal::Ciphertext const &bfv,
-                               size_t ct_poly_size, seal::Ciphertext &res_ct) {
+                              seal::Ciphertext &res_ct) {
 
   const auto &context_data = context->first_context_data();
-  auto &parms2 = context_data->parms();
-  auto &coeff_modulus = parms2.coeff_modulus();
-  size_t coeff_count = parms2.poly_modulus_degree();  // 4096
-  size_t coeff_mod_count = coeff_modulus.size();  // 2
-  auto ntt_tables = context_data->small_ntt_tables();
+  const auto &parms2 = context_data->parms();
+  const auto &coeff_modulus = parms2.coeff_modulus();
+  const size_t coeff_count = parms2.poly_modulus_degree();  // 4096
+  const size_t coeff_mod_count = coeff_modulus.size();  // 2
+  const auto ntt_tables = context_data->small_ntt_tables();
 
   std::vector<std::vector<uint64_t>> decomposed_bfv;
   decomp_rlwe(bfv, decomposed_bfv);
@@ -87,7 +87,6 @@ void GSWEval::external_product(GSWCiphertext const &gsw_enc, seal::Ciphertext co
 
     for (int mod_id = 0; mod_id < coeff_mod_count; mod_id++) {
       auto mod_idx = (mod_id * coeff_count);
-      auto mod = static_cast<uint64_t>(coeff_modulus[mod_id].value());
       for (int coeff_id = 0; coeff_id < coeff_count; coeff_id++) {
         // ct_ptr[coeff_id + mod_idx] = static_cast<uint64_t>(pt_ptr[coeff_id + mod_idx] % mod);
         auto x = pt_ptr[coeff_id + mod_idx];
@@ -168,7 +167,7 @@ void GSWEval::query_to_gsw(std::vector<seal::Ciphertext> query, GSWCiphertext gs
   gsw_ntt_negacyclic_harvey(output);
   output.resize(2 * cl);
   for (int i = 0; i < cl; i++) {
-    external_product(gsw_key, query[i], coeff_count, query[i]);
+    external_product(gsw_key, query[i], query[i]);
     for (int j = 0; j < coeff_count * coeff_mod_count; j++) {
       output[i + cl].push_back(query[i].data(0)[j]);
     }

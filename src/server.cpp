@@ -17,19 +17,6 @@ PirServer::PirServer(const PirParams &pir_params)
       hashed_key_width_(pir_params_.get_hashed_key_width()) {
   // delete the raw_db_file if it exists
   std::remove(RAW_DB_FILE);
-  // // precompute the mu values for barret reduction
-
-  // const auto seal_params = context_.get_context_data(context_.first_parms_id())->parms();
-  // const auto &coeff_modulus = seal_params.coeff_modulus();
-  // size_t coeff_mod_count = coeff_modulus.size();
-  // DEBUG_PRINT("coeff 0: " << coeff_modulus[0].value());
-  // DEBUG_PRINT("coeff 1: " << coeff_modulus[1].value());
-  // for (int mod_id = 0; mod_id < coeff_mod_count; ++mod_id) {
-  //     int k = coeff_modulus[mod_id].bit_count() - 1; // k = n - 1
-  //     uint64_t mod = static_cast<uint64_t>(coeff_modulus[mod_id].value());
-  //     DEBUG_PRINT("k: " << k);
-  //     mu_values_[mod_id] = (1ULL << (2 * k)) / mod; // Precompute mu
-  // }
 }
 
 PirServer::~PirServer() {
@@ -224,12 +211,13 @@ void PirServer::evaluate_gsw_product(std::vector<seal::Ciphertext> &result,
    * result = RGSW(b) * (y - x) + x, where "*" is the external product, "+" and "-" are homomorphic operations.
    */
   auto block_size = result.size() / 2;
-  auto ct_poly_size = result[0].size();
   for (int i = 0; i < block_size; i++) {
-    evaluator_.sub_inplace(result[i + block_size], result[i]);  // y - x
-    data_gsw.external_product(selection_cipher, result[i + block_size], ct_poly_size, result[i + block_size]);  // b * (y - x)
-    data_gsw.ciphertext_inverse_ntt(result[i + block_size]);
-    evaluator_.add_inplace(result[i], result[i + block_size]);  // x + b * (y - x)
+    auto &x = result[i];
+    auto &y = result[i + block_size];
+    evaluator_.sub_inplace(y, x);  // y - x
+    data_gsw.external_product(selection_cipher, y, y);  // b * (y - x)
+    data_gsw.ciphertext_inverse_ntt(y);
+    evaluator_.add_inplace(result[i], y);  // x + b * (y - x)
   }
   result.resize(block_size);
 }
