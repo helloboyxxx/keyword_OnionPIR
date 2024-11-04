@@ -66,6 +66,7 @@ public:
   size_t get_num_bits_per_plaintext() const;
   seal::EncryptionParameters get_seal_params() const;
   uint64_t get_DBSize() const;
+  double get_DBSize_MB() const;
   size_t get_num_entries() const;
   size_t get_entry_size() const;
   std::vector<uint64_t> get_dims() const;

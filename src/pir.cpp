@@ -109,6 +109,10 @@ size_t PirParams::get_num_bits_per_plaintext() const {
 
 seal::EncryptionParameters PirParams::get_seal_params() const { return seal_params_; }
 uint64_t PirParams::get_DBSize() const { return DBSize_; }
+double PirParams::get_DBSize_MB() const {
+  return static_cast<double>(DBSize_) * entry_size_ *
+         get_num_entries_per_plaintext() / 1024 / 1024;
+}
 size_t PirParams::get_entry_size() const { return entry_size_; }
 size_t PirParams::get_num_entries() const { return num_entries_; }
 std::vector<uint64_t> PirParams::get_dims() const { return dims_; }
@@ -120,9 +124,6 @@ float PirParams::get_blowup_factor() const { return blowup_factor_; }
 
 
 // ================== HELPER FUNCTIONS ==================
-
-
-
 
 Entry gen_single_key(uint64_t key_id, size_t hashed_key_width) {
   Entry hashed_key;
@@ -140,10 +141,11 @@ void PirParams::print_values() const {
   std::cout << "                       PIR PARAMETERS                         " << std::endl;
   std::cout << "==============================================================" << std::endl;
   std::cout << "  DBSize_ (num plaintexts) \t\t\t= " << DBSize_ << std::endl;
+  std::cout << "  DBSize_ (MB) \t\t\t\t\t= " << get_DBSize_MB() << std::endl;
+  std::cout << "  entry_size_(byte)\t\t\t\t= " << entry_size_ << std::endl;
   std::cout << "  Num entries per plaintext\t\t\t= "
             << get_num_entries_per_plaintext() << std::endl;
   std::cout << "  num_entries_(actually stored)\t\t\t= " << num_entries_ << std::endl;
-  std::cout << "  entry_size_(byte)\t\t\t\t= " << entry_size_ << std::endl;
   std::cout << "  l_\t\t\t\t\t\t= " << l_ << std::endl;
   std::cout << "  l_key_\t\t\t\t\t= " << l_key_ << std::endl;
   std::cout << "  base_log2_\t\t\t\t\t= " << base_log2_ << std::endl;

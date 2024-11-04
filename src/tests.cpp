@@ -304,6 +304,12 @@ void test_pir() {
   server.gen_data();
   BENCH_PRINT("Server initialized");
 
+
+  // some global results
+  size_t galois_key_size = 0;
+  size_t gsw_key_size = 0;
+  size_t query_size = 0;
+
   // Run the query process many times.
   srand(time(0)); // reset the seed for the random number generator
   for (int i = 0; i < EXPERIMENT_ITERATIONS; i++) {
@@ -315,8 +321,8 @@ void test_pir() {
     std::stringstream galois_key_stream, gsw_stream, data_stream;
 
     // Client create galois keys and gsw keys and writes to the stream (to the server)
-    size_t galois_key_size = client.create_galois_keys(galois_key_stream);
-    size_t gsw_key_size = client.write_gsw_to_stream(
+    galois_key_size = client.create_galois_keys(galois_key_stream);
+    gsw_key_size = client.write_gsw_to_stream(
         client.generate_gsw_from_key(), gsw_stream);
     //--------------------------------------------------------------------------------
     server.decryptor_ = client.get_decryptor();
@@ -334,7 +340,7 @@ void test_pir() {
     // ============= CLIENT ===============
     auto c_start_time = CURR_TIME;  // client start time for the query
     PirQuery query = client.generate_query(entry_index);
-    auto query_size = client.write_query_to_stream(query, data_stream);
+    query_size = client.write_query_to_stream(query, data_stream);
     
     // ============= SERVER ===============
     auto s_start_time = CURR_TIME;  // server start time for processing the query
@@ -351,9 +357,6 @@ void test_pir() {
     Entry actual_entry = server.direct_get_entry(entry_index);
 
     // ============= PRINTING RESULTS ===============
-    DEBUG_PRINT("\t\tGalois size:\t" << galois_key_size);
-    DEBUG_PRINT("\t\tGSW key size:\t" << gsw_key_size);
-    DEBUG_PRINT("\t\tQuery size:\t" << query_size);
     BENCH_PRINT("\t\tServer time:\t" << TIME_DIFF(s_start_time, s_end_time) << " ms");
     BENCH_PRINT("\t\tClient Time:\t" << TIME_DIFF(c_start_time, c_end_time) - TIME_DIFF(s_start_time, s_end_time) << " ms"); 
     DEBUG_PRINT("\t\tNoise budget:\t" << client.get_decryptor()->invariant_noise_budget(result[0]));
@@ -376,8 +379,16 @@ void test_pir() {
     PRINT_BAR;
   }
 
-  std::cout << "Average server time: " << server_time_sum / EXPERIMENT_ITERATIONS << " ms" << std::endl;
+  auto avg_server_time = server_time_sum / EXPERIMENT_ITERATIONS;
+  std::cout << "Average server time: " << avg_server_time << " ms" << std::endl;
   std::cout << "Average client time: " << client_time_sum / EXPERIMENT_ITERATIONS << " ms" << std::endl;
+  std::cout << "galois key size: " << galois_key_size << " bytes" << std::endl;
+  std::cout << "gsw key size: " << gsw_key_size << " bytes" << std::endl;
+  std::cout << "total key size: " << static_cast<double>(galois_key_size + gsw_key_size) / 1024 / 1024 << "MB" << std::endl;
+  std::cout << "query size: " << query_size << " bytes" << std::endl;
+  std::cout << "Throughput: "
+            << pir_params.get_DBSize_MB() / (static_cast<double>(avg_server_time) / 1000)
+            << " MB/s" << std::endl;
   std::cout << "Success rate: " << success_count << "/" << EXPERIMENT_ITERATIONS << std::endl;
 }
 
