@@ -157,8 +157,9 @@ PirServer::evaluate_first_dim(std::vector<seal::Ciphertext> &selection_vector) {
   const auto coeff_modulus = seal_params.coeff_modulus();
   const size_t coeff_count = seal_params.poly_modulus_degree();
   const size_t coeff_mod_count = coeff_modulus.size();
-  const size_t encrypted_ntt_size = selection_vector[0].size();
   const size_t coeff_val_cnt = coeff_count * coeff_mod_count;
+  // const size_t encrypted_ntt_size = selection_vector[0].size();
+  constexpr size_t encrypted_ntt_size = 2;  // number of polynomials in the ciphertext
   
   std::vector<seal::Ciphertext> result;
   seal::Ciphertext ct_acc;
@@ -172,6 +173,9 @@ PirServer::evaluate_first_dim(std::vector<seal::Ciphertext> &selection_vector) {
   // other_dim_sz many consecutive entries in the database. We are going to
   // multiply the selection_vector with the DB. Then only one row of the result
   // is going to be added to the result vector.
+  
+  
+  /**
   for (size_t j = 0; j < other_dim_sz; ++j) {
     std::vector<std::vector<uint128_t>> buffer(
         encrypted_ntt_size, std::vector<uint128_t>(coeff_val_cnt, 0));
@@ -201,6 +205,58 @@ PirServer::evaluate_first_dim(std::vector<seal::Ciphertext> &selection_vector) {
     // evaluator_.transform_from_ntt_inplace(ct_acc);  // transform
     result.push_back(ct_acc);
   }
+  */
+
+  // Let's try some tiling
+  constexpr size_t tile_size_fst_dim = 2;  // Tile size for fst_dim_sz
+  constexpr size_t tile_size_other_dim = 2;  // Tile size for other_dim_sz
+
+  for (size_t j_base = 0; j_base < other_dim_sz; j_base += tile_size_other_dim) {
+    for (size_t j = j_base; j < std::min(j_base + tile_size_other_dim, other_dim_sz); ++j) {
+        std::vector<std::vector<uint128_t>> buffer(
+            encrypted_ntt_size, std::vector<uint128_t>(coeff_val_cnt, 0));
+
+        // Tile the fst_dim_sz loop to process in blocks
+        for (size_t k_base = 0; k_base < fst_dim_sz; k_base += tile_size_fst_dim) {
+            for (size_t k = k_base; k < std::min(k_base + tile_size_fst_dim, fst_dim_sz); ++k) {
+                for (size_t poly_id = 0; poly_id < encrypted_ntt_size; ++poly_id) {
+                    utils::multiply_poly_acum(
+                        selection_vector[k].data(poly_id),
+                        (*db_[fst_dim_sz * j + k]).data(),
+                        coeff_val_cnt,
+                        buffer[poly_id].data()
+                    );
+                }
+            }
+        }
+
+        // Initialize ct_acc with selection_vector[0] for this `j` iteration
+        ct_acc = selection_vector[0];
+
+        // Process the buffer and perform modular reduction
+        for (size_t poly_id = 0; poly_id < encrypted_ntt_size; ++poly_id) {
+            auto ct_ptr = ct_acc.data(poly_id);  // pointer to the data of the ciphertext
+            auto& pt_ptr = buffer[poly_id];       // reference to buffer data for easier access
+
+            for (int mod_id = 0; mod_id < coeff_mod_count; ++mod_id) {
+                size_t mod_idx = mod_id * coeff_count;
+
+                for (int coeff_id = 0; coeff_id < coeff_count; ++coeff_id) {
+                    auto x = pt_ptr[coeff_id + mod_idx];
+                    uint64_t raw[2] = {static_cast<uint64_t>(x), static_cast<uint64_t>(x >> 64)};
+                    ct_ptr[coeff_id + mod_idx] = util::barrett_reduce_128(raw, coeff_modulus[mod_id]);
+                }
+            }
+        }
+
+        // Perform the inverse NTT transformation
+        evaluator_.transform_from_ntt_inplace(ct_acc);  // Uncomment if NTT transformation is required
+        result.push_back(ct_acc);
+    }
+  }
+
+
+
 
   return result;
 }
