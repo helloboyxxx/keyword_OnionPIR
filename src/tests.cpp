@@ -10,8 +10,8 @@
 #include <bitset>
 
 // "Default" Parameters for the PIR scheme
-#define DB_SZ             1 << 18       // Database size <==> Number of plaintexts in the database
-#define NUM_ENTRIES       1 << 18       // Number of entries in the database, can be less than DB_SZ
+#define DB_SZ             1 << 15       // Database size <==> Number of plaintexts in the database
+#define NUM_ENTRIES       1 << 15       // Number of entries in the database, can be less than DB_SZ
 #define GSW_L             4             // Parameter for GSW scheme. 
 #define GSW_L_KEY         9             // GSW for query expansion
 #define FST_DIM_SZ        256           // Number of dimensions of the hypercube
@@ -19,6 +19,7 @@
 #define CT_MODS	         {60, 60, 60}   // Coeff modulus for the BFV scheme
 
 #define EXPERIMENT_ITERATIONS 20
+#define WARMUP_ITERATIONS     3
 
 void print_func_name(std::string func_name) {
 #ifdef _DEBUG
@@ -312,7 +313,7 @@ void test_pir() {
 
   // Run the query process many times.
   srand(time(0)); // reset the seed for the random number generator
-  for (int i = 0; i < EXPERIMENT_ITERATIONS; i++) {
+  for (int i = 0; i < EXPERIMENT_ITERATIONS + WARMUP_ITERATIONS; i++) {
     
     // ============= OFFLINE PHASE ==============
     // Initialize the client
@@ -356,7 +357,11 @@ void test_pir() {
     // Directly get the plaintext from server. Not part of PIR.
     Entry actual_entry = server.direct_get_entry(entry_index);
 
-    // ============= PRINTING RESULTS ===============
+    // ============= PRINTING RESULTS ===============    
+    if (i < WARMUP_ITERATIONS) {
+      PRINT_BAR;
+      continue;
+    }
     BENCH_PRINT("\t\tServer time:\t" << TIME_DIFF(s_start_time, s_end_time) << " ms");
     BENCH_PRINT("\t\tClient Time:\t" << TIME_DIFF(c_start_time, c_end_time) - TIME_DIFF(s_start_time, s_end_time) << " ms"); 
     DEBUG_PRINT("\t\tNoise budget:\t" << client.get_decryptor()->invariant_noise_budget(result[0]));

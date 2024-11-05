@@ -54,7 +54,7 @@ inline void multiply_acum(uint64_t op1, uint64_t op2, __uint128_t &product_acum)
 */
 inline void multiply_poly_acum(const uint64_t *ct_ptr, const uint64_t *pt_ptr, size_t size,
                                uint128_t *result) {
-  for (int cc = 0; cc < size; cc += 32) {
+  for (size_t cc = 0; cc < size; cc += 32) {
     multiply_acum(ct_ptr[cc], pt_ptr[cc], result[cc]);
     multiply_acum(ct_ptr[cc + 1], pt_ptr[cc + 1], result[cc + 1]);
     multiply_acum(ct_ptr[cc + 2], pt_ptr[cc + 2], result[cc + 2]);

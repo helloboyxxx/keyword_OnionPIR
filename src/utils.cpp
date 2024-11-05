@@ -11,7 +11,7 @@ void utils::negacyclic_shift_poly_coeffmod(seal::util::ConstCoeffIter poly, size
   }
 
   uint64_t index_raw = shift;
-  uint64_t coeff_count_mod_mask = static_cast<uint64_t>(coeff_count) - 1;
+  const uint64_t coeff_count_mod_mask = static_cast<uint64_t>(coeff_count) - 1;
   for (size_t i = 0; i < coeff_count; i++, poly++, index_raw++) {
     uint64_t index = index_raw & coeff_count_mod_mask;  // shifted index, possibly wrapping around
     if (!(index_raw & static_cast<uint64_t>(coeff_count)) || !*poly) {
@@ -26,9 +26,9 @@ void utils::negacyclic_shift_poly_coeffmod(seal::util::ConstCoeffIter poly, size
 
 void utils::shift_polynomial(seal::EncryptionParameters &params, seal::Ciphertext &encrypted,
                              seal::Ciphertext &destination, size_t index) {
-  auto encrypted_count = encrypted.size();
-  auto coeff_count = params.poly_modulus_degree();
-  auto coeff_mod_count = params.coeff_modulus().size() - 1;
+  const auto encrypted_count = encrypted.size();
+  const auto coeff_count = params.poly_modulus_degree();
+  const auto coeff_mod_count = params.coeff_modulus().size() - 1;
   destination = encrypted;
   for (int i = 0; i < encrypted_count; i++) {
     for (int j = 0; j < coeff_mod_count; j++) {
@@ -68,7 +68,7 @@ std::vector<std::vector<uint64_t>> gsw_gadget(size_t l, uint64_t base_log2, size
   // Create RGSW gadget.
   std::vector<std::vector<uint64_t>> gadget(coeff_mod_count, std::vector<uint64_t>(l));
   for (int i = 0; i < coeff_mod_count; i++) {
-    __uint128_t mod = coeff_modulus[i].value();
+    const __uint128_t mod = coeff_modulus[i].value();
     __uint128_t pow = 1;
     for (int j = l - 1; j >= 0; j--) {
       gadget[i][j] = pow;

@@ -383,7 +383,7 @@ std::vector<seal::Ciphertext> PirServer::make_query(const uint32_t client_id, Pi
   // Reconstruct RGSW queries
   auto convert_start = CURR_TIME;
   auto l = pir_params_.get_l();
-  GSWCiphertext gsw_vec[dims_.size() - 1]; // GSW ciphertexts
+  std::vector<GSWCiphertext> gsw_vec(dims_.size() - 1); // GSW ciphertexts
   for (int i = 1; i < dims_.size(); i++) {
     std::vector<seal::Ciphertext> lwe_vector; // BFV ciphertext, size l * 2. This vector will be reconstructed as a single RGSW ciphertext.
     for (int k = 0; k < l; k++) {
@@ -446,14 +446,14 @@ void PirServer::push_database_chunk(std::vector<Entry> &chunk_entry) {
     }
   }
 
-  size_t bits_per_coeff = pir_params_.get_num_bits_per_coeff();
-  size_t num_coeffs = pir_params_.get_seal_params().poly_modulus_degree();
-  size_t num_bits_per_plaintext = pir_params_.get_num_bits_per_plaintext();
-  size_t num_entries_per_plaintext = pir_params_.get_num_entries_per_plaintext();
-  size_t num_plaintexts = chunk_entry.size() / num_entries_per_plaintext;  // number of plaintexts in the new chunk
+  const auto bits_per_coeff = pir_params_.get_num_bits_per_coeff();
+  const auto num_coeffs = pir_params_.get_seal_params().poly_modulus_degree();
+  const auto num_bits_per_plaintext = pir_params_.get_num_bits_per_plaintext();
+  const auto num_entries_per_plaintext = pir_params_.get_num_entries_per_plaintext();
+  const auto num_plaintexts = chunk_entry.size() / num_entries_per_plaintext;  // number of plaintexts in the new chunk
   const uint128_t coeff_mask = (uint128_t(1) << (bits_per_coeff)) - 1;  // bits_per_coeff many 1s
   
-  auto fst_dim_sz = dims_[0];
+  const auto fst_dim_sz = dims_[0];
   DatabaseChunk chunk = std::make_unique<std::optional<seal::Plaintext>[]>(fst_dim_sz);
   DatabaseChunk chunk_copy = std::make_unique<std::optional<seal::Plaintext>[]>(fst_dim_sz);
 

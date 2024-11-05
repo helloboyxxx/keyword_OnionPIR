@@ -27,11 +27,11 @@ seal::Decryptor *PirClient::get_decryptor() { return decryptor_; }
 
 std::vector<Ciphertext> PirClient::generate_gsw_from_key() {
   std::vector<seal::Ciphertext> gsw_enc; // temporary GSW ciphertext using seal::Ciphertext
-  auto sk_ = secret_key_->data();
-  auto ntt_tables = context_->first_context_data()->small_ntt_tables();
-  auto coeff_modulus = context_->first_context_data()->parms().coeff_modulus();
-  auto coeff_mod_count = coeff_modulus.size();
-  auto coeff_count = params_.poly_modulus_degree();
+  const auto sk_ = secret_key_->data();
+  const auto ntt_tables = context_->first_context_data()->small_ntt_tables();
+  const auto coeff_modulus = context_->first_context_data()->parms().coeff_modulus();
+  const auto coeff_mod_count = coeff_modulus.size();
+  const auto coeff_count = params_.poly_modulus_degree();
   std::vector<uint64_t> sk_ntt(params_.poly_modulus_degree() * coeff_mod_count);
 
   memcpy(sk_ntt.data(), sk_.data(), coeff_count * coeff_mod_count * sizeof(uint64_t));
@@ -65,11 +65,11 @@ PirQuery PirClient::generate_query(const std::uint64_t entry_index) {
 
   // ================== Setup parameters ==================
   // Get the corresponding index of the plaintext in the database
-  size_t plaintext_index = get_database_plain_index(entry_index);
+  const size_t plaintext_index = get_database_plain_index(entry_index);
   std::vector<size_t> query_indices = get_query_indices(plaintext_index);
   PRINT_INT_ARRAY("\t\tquery_indices", query_indices.data(), query_indices.size());
-  uint64_t coeff_count = params_.poly_modulus_degree(); // 4096
-  uint64_t msg_size = dims_[0] + pir_params_.get_l() * (dims_.size() - 1);
+  const uint64_t coeff_count = params_.poly_modulus_degree(); // 4096
+  const uint64_t msg_size = dims_[0] + pir_params_.get_l() * (dims_.size() - 1);
   uint64_t bits_per_ciphertext = 1; // padding msg_size to the next power of 2
   // Calculate n, the number of slots used for packing and unpacking.
   while (bits_per_ciphertext < msg_size) {
@@ -93,14 +93,14 @@ PirQuery PirClient::generate_query(const std::uint64_t entry_index) {
   PirQuery query;
   encryptor_->encrypt_symmetric_seeded(plain_query, query);
 
-  auto l = pir_params_.get_l();
-  auto base_log2 = pir_params_.get_base_log2();
-  auto context_data = context_->first_context_data();
-  auto coeff_modulus = context_data->parms().coeff_modulus();
-  auto coeff_mod_count = coeff_modulus.size();  // 2 here, not 3. Notice that here we use the first context_data, not all of coeff_modulus are used.
+  const auto l = pir_params_.get_l();
+  const auto base_log2 = pir_params_.get_base_log2();
+  const auto context_data = context_->first_context_data();
+  const auto coeff_modulus = context_data->parms().coeff_modulus();
+  const auto coeff_mod_count = coeff_modulus.size();  // 2 here, not 3. Notice that here we use the first context_data, not all of coeff_modulus are used.
 
   // The following two for-loops calculates the powers for GSW gadgets.
-  __uint128_t inv[coeff_mod_count];
+  std::vector<__uint128_t> inv(coeff_mod_count);
   for (int k = 0; k < coeff_mod_count; k++) {
     uint64_t result;
     seal::util::try_invert_uint_mod(bits_per_ciphertext, coeff_modulus[k], result);
@@ -218,18 +218,18 @@ std::vector<seal::Plaintext> PirClient::decrypt_result(std::vector<seal::Ciphert
 
 Entry PirClient::get_entry_from_plaintext(size_t entry_index, seal::Plaintext plaintext) {
   // Offset in the plaintext in bits
-  size_t start_position_in_plaintext = (entry_index % pir_params_.get_num_entries_per_plaintext()) *
+  const size_t start_position_in_plaintext = (entry_index % pir_params_.get_num_entries_per_plaintext()) *
                                        pir_params_.get_entry_size() * 8;
 
   // Offset in the plaintext by coefficient
-  size_t num_bits_per_coeff = pir_params_.get_num_bits_per_coeff();
+  const size_t num_bits_per_coeff = pir_params_.get_num_bits_per_coeff();
   size_t coeff_index = start_position_in_plaintext / num_bits_per_coeff;
 
   // Offset in the coefficient by bits
-  size_t coeff_offset = start_position_in_plaintext % num_bits_per_coeff;
+  const size_t coeff_offset = start_position_in_plaintext % num_bits_per_coeff;
 
   // Size of entry in bits
-  size_t entry_size = pir_params_.get_entry_size();
+  const size_t entry_size = pir_params_.get_entry_size();
   Entry result;
 
   uint128_t data_buffer = plaintext.data()[coeff_index] >> coeff_offset;

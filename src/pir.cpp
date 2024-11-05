@@ -17,7 +17,7 @@ PirParams::PirParams(const uint64_t DBSize, const uint64_t first_dim_sz,
 
 
 // =============== PARAMS CALCULATIONS ===============
-  uint64_t pt_mod = generate_prime(pt_mod_width);
+  const uint64_t pt_mod = generate_prime(pt_mod_width);
   // calculate the entry size in bytes automatically.
   entry_size_ =
       (seal::Modulus(pt_mod).bit_count() - 1) *
@@ -72,7 +72,7 @@ PirParams::PirParams(const uint64_t DBSize, const uint64_t first_dim_sz,
   // This for-loop calculates the sum of bits in the
   // first_context_data().parms().coeff_modulus(). This is used for calculating
   // the number of bits required for the base (B) in RGSW.
-  auto modulus = seal_params_.coeff_modulus();
+  const auto modulus = seal_params_.coeff_modulus();
   int bits = 0;
   for (int i = 0; i < modulus.size() - 1; i++) {
     bits += modulus[i].bit_count();
@@ -95,7 +95,7 @@ PirParams::PirParams(const uint64_t DBSize, const uint64_t first_dim_sz,
 }
 
 size_t PirParams::get_num_entries_per_plaintext() const {
-  size_t total_bits = get_num_bits_per_plaintext();
+  const size_t total_bits = get_num_bits_per_plaintext();
   return total_bits / (entry_size_ * 8);
 }
 
