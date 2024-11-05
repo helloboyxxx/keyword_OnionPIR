@@ -17,6 +17,10 @@ PirServer::PirServer(const PirParams &pir_params)
       hashed_key_width_(pir_params_.get_hashed_key_width()) {
   // delete the raw_db_file if it exists
   std::remove(RAW_DB_FILE);
+
+  // allocate enough space for the database, init with std::nullopt
+  db_ = std::make_unique<std::optional<seal::Plaintext>[]>(DBSize_);
+
 }
 
 PirServer::~PirServer() {
@@ -61,7 +65,9 @@ Entry generate_entry_with_key(uint64_t key_id, size_t entry_size, size_t hashed_
 
 // Fills the database with random data
 void PirServer::gen_data() {
-  std::vector<std::vector<Entry>> chunks;
+
+  // init the database with std::nullopt
+  db_.reset(new std::optional<seal::Plaintext>[DBSize_]);
 
   auto fst_dim_sz = dims_[0];
   const size_t other_dim_sz = DBSize_ / fst_dim_sz;
@@ -71,7 +77,7 @@ void PirServer::gen_data() {
       one_chunk[k] = generate_entry(other_dim_sz * k + j, pir_params_.get_entry_size());
     }
     write_one_chunk(one_chunk);
-    push_database_chunk(one_chunk);
+    push_database_chunk(one_chunk, j);
     print_progress(j+1, other_dim_sz);
   }
   // transform the ntt_db_ from coefficient form to ntt form. db_ is not transformed.
@@ -172,7 +178,9 @@ PirServer::evaluate_first_dim(std::vector<seal::Ciphertext> &selection_vector) {
     // summing C_{BFV_k} * DB_{N_1 * j + k}
     for (size_t k = 0; k < fst_dim_sz; k++) {
       for (size_t poly_id = 0; poly_id < encrypted_ntt_size; poly_id++) {
-        utils::multiply_poly_acum(selection_vector[k].data(poly_id), (*db_[j][k]).data(), coeff_val_cnt, buffer[poly_id].data()); 
+        utils::multiply_poly_acum(selection_vector[k].data(poly_id),
+                                  (*db_[fst_dim_sz * j + k]).data(),
+                                  coeff_val_cnt, buffer[poly_id].data());
       }
     }
     ct_acc = selection_vector[0];
@@ -190,7 +198,7 @@ PirServer::evaluate_first_dim(std::vector<seal::Ciphertext> &selection_vector) {
         }
       }
     }
-    evaluator_.transform_from_ntt_inplace(ct_acc);  // transform
+    // evaluator_.transform_from_ntt_inplace(ct_acc);  // transform
     result.push_back(ct_acc);
   }
 
@@ -431,7 +439,7 @@ std::vector<seal::Ciphertext> PirServer::make_seeded_query(const uint32_t client
 }
 
 
-void PirServer::push_database_chunk(std::vector<Entry> &chunk_entry) {
+void PirServer::push_database_chunk(std::vector<Entry> &chunk_entry, const size_t chunk_idx) {
 
   // Flattens data into vector of u8s and pads each entry with 0s to entry_size number of bytes.
   // This is actually resizing from entry.size() to pir_params_.get_entry_size()
@@ -454,13 +462,7 @@ void PirServer::push_database_chunk(std::vector<Entry> &chunk_entry) {
   const uint128_t coeff_mask = (uint128_t(1) << (bits_per_coeff)) - 1;  // bits_per_coeff many 1s
   
   const auto fst_dim_sz = dims_[0];
-  DatabaseChunk chunk = std::make_unique<std::optional<seal::Plaintext>[]>(fst_dim_sz);
-  DatabaseChunk chunk_copy = std::make_unique<std::optional<seal::Plaintext>[]>(fst_dim_sz);
-
-  // init chunk with empty plaintexts({})
-  for (size_t i = 0; i < fst_dim_sz; i++) {
-    chunk[i] = std::nullopt;
-  }
+  const auto chunk_offset = fst_dim_sz * chunk_idx;  // offset for the current chunk
 
   // Now we handle plaintexts one by one.
   for (int i = 0; i < num_plaintexts; i++) {
@@ -505,23 +507,27 @@ void PirServer::push_database_chunk(std::vector<Entry> &chunk_entry) {
       plaintext[index] = data_buffer & coeff_mask;
       index++;
     }
-    chunk[i] = std::move(plaintext);
+    db_[i + chunk_offset] = std::move(plaintext);
   }
-
-  db_.push_back(std::move(chunk));
 }
 
 void PirServer::preprocess_ntt() {
   // tutorial on Number Theoretic Transform (NTT): https://youtu.be/Pct3rS4Y0IA?si=25VrCwBJuBjtHqoN
-  const size_t chunk_size = dims_[0];
-  for (DatabaseChunk &chunk : db_) {
-    for (std::size_t i = 0; i < chunk_size; ++i) {
-      if (chunk[i].has_value()) {
-        seal::Plaintext &pt = chunk[i].value();
-        evaluator_.transform_to_ntt_inplace(pt, context_.first_parms_id());
-      }
+  for (size_t i = 0; i < DBSize_; ++i) {
+    if (db_[i].has_value()) {
+      seal::Plaintext &pt = db_[i].value();
+      evaluator_.transform_to_ntt_inplace(pt, context_.first_parms_id());
     }
   }
+  // const size_t chunk_size = dims_[0];
+  // for (DatabaseChunk &chunk : db_) {
+  //   for (std::size_t i = 0; i < chunk_size; ++i) {
+  //     if (chunk[i].has_value()) {
+  //       seal::Plaintext &pt = chunk[i].value();
+  //       evaluator_.transform_to_ntt_inplace(pt, context_.first_parms_id());
+  //     }
+  //   }
+  // }
 }
 
 void PirServer::write_one_chunk(std::vector<Entry> &data) {

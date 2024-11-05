@@ -45,7 +45,7 @@ void negate_poly_inplace(seal::Plaintext &plain) {
 }
 
 
-std::string uint128_to_string(__uint128_t value) {
+std::string uint128_to_string(uint128_t value) {
     // Split the 128-bit value into two 64-bit parts
     uint64_t high = value >> 64;
     uint64_t low = static_cast<uint64_t>(value);
@@ -68,8 +68,8 @@ std::vector<std::vector<uint64_t>> gsw_gadget(size_t l, uint64_t base_log2, size
   // Create RGSW gadget.
   std::vector<std::vector<uint64_t>> gadget(coeff_mod_count, std::vector<uint64_t>(l));
   for (int i = 0; i < coeff_mod_count; i++) {
-    const __uint128_t mod = coeff_modulus[i].value();
-    __uint128_t pow = 1;
+    const uint128_t mod = coeff_modulus[i].value();
+    uint128_t pow = 1;
     for (int j = l - 1; j >= 0; j--) {
       gadget[i][j] = pow;
       pow = (pow << base_log2) % mod;

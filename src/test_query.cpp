@@ -112,10 +112,10 @@ void PirTest::enc_then_add() {
   DEBUG_PRINT("modulus 1: " << coeff_modulus[1].value());
 
   const size_t pos = 3;
-  __uint128_t bigger_mod = std::max(coeff_modulus[0].value(), coeff_modulus[1].value());
-  __uint128_t smaller_mod = std::min(coeff_modulus[0].value(), coeff_modulus[1].value());
+  uint128_t bigger_mod = std::max(coeff_modulus[0].value(), coeff_modulus[1].value());
+  uint128_t smaller_mod = std::min(coeff_modulus[0].value(), coeff_modulus[1].value());
   size_t mod_diff = bigger_mod - smaller_mod;
-  __uint128_t mod_mult = bigger_mod * smaller_mod;
+  uint128_t mod_mult = bigger_mod * smaller_mod;
   DEBUG_PRINT("mod_diff: " << mod_diff);
 
   std::vector<std::vector<uint64_t>> gadget = gsw_gadget(l, pir_params.get_base_log2(), coeff_mod_count, coeff_modulus);
@@ -131,9 +131,9 @@ void PirTest::enc_then_add() {
   }
 
   // auto to_add = mod_diff * 4096 * 256;
-  __uint128_t delta = mod_mult / plain_modulus;
-  __uint128_t message = 15;
-  __uint128_t to_add = delta * message;
+  uint128_t delta = mod_mult / plain_modulus;
+  uint128_t message = 15;
+  uint128_t to_add = delta * message;
   DEBUG_PRINT("delta:    \t" << uint128_to_string(delta));
   DEBUG_PRINT("size_t max:\t" << std::numeric_limits<size_t>::max());
 
@@ -148,8 +148,8 @@ void PirTest::enc_then_add() {
 
   // try manipulating the x^3 coefficient
   for (int k = 0; k < coeff_mod_count; ++k) {
-    __uint128_t mod = coeff_modulus[k].value();
-    __uint128_t pad = k * coeff_count;
+    uint128_t mod = coeff_modulus[k].value();
+    uint128_t pad = k * coeff_count;
     a_head[pos + pad] = (a_head[pos + pad] + (to_add % mod)) % mod;
   }
 

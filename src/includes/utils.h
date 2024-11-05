@@ -40,8 +40,8 @@ namespace utils {
     Helper function for multiply_poly_acum. Multiplies two operands together and
    stores the result in product_acum.
 */
-inline void multiply_acum(uint64_t op1, uint64_t op2, __uint128_t &product_acum) {
-  product_acum = product_acum + static_cast<__uint128_t>(op1) * static_cast<__uint128_t>(op2);
+inline void multiply_acum(uint64_t op1, uint64_t op2, uint128_t &product_acum) {
+  product_acum = product_acum + static_cast<uint128_t>(op1) * static_cast<uint128_t>(op2);
 }
 
 /*!
@@ -105,7 +105,7 @@ void shift_polynomial(seal::EncryptionParameters &params, seal::Ciphertext &encr
 void negate_poly_inplace(seal::Plaintext &plain);
 
 // Convert a 128-bit unsigned integer to a string
-std::string uint128_to_string(__uint128_t value);
+std::string uint128_to_string(uint128_t value);
 
 /**
  * @brief Construct a RGSW gadget. Notice that the gadget is from large to

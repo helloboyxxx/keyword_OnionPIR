@@ -253,11 +253,11 @@ void serialization_example() {
   
   auto mods = context_.first_context_data()->parms().coeff_modulus();
   auto plain_modulus = params.plain_modulus().value();
-  __uint128_t mod_0 = mods[0].value();
-  __uint128_t mod_1 = mods[1].value();
-  __uint128_t delta = mod_0 * mod_1 / plain_modulus;
-  __uint128_t message = 15;
-  __uint128_t to_add = delta * message;
+  uint128_t mod_0 = mods[0].value();
+  uint128_t mod_1 = mods[1].value();
+  uint128_t delta = mod_0 * mod_1 / plain_modulus;
+  uint128_t message = 15;
+  uint128_t to_add = delta * message;
   auto padding = params.poly_modulus_degree();
   ptr_0[0] = (ptr_0[0] + (to_add % mod_0)) % mod_0;
   ptr_0[0 + padding] = (ptr_0[0 + padding] + (to_add % mod_1)) % mod_1;

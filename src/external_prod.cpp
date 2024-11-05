@@ -235,7 +235,7 @@ GSWEval::enc_plain_to_gsw_one_row(std::vector<uint64_t> const &plaintext,
   // Many(2) moduli are used
   for (int mod_id = 0; mod_id < coeff_mod_count; mod_id++) {
     auto pad = (mod_id * coeff_count);
-    __uint128_t mod = coeff_modulus[mod_id].value();
+    uint128_t mod = coeff_modulus[mod_id].value();
     uint64_t gadget_coef = gadget[mod_id][level];
     auto pt = plaintext.data();
     if (plaintext.size() == coeff_count * coeff_mod_count) {
@@ -243,7 +243,7 @@ GSWEval::enc_plain_to_gsw_one_row(std::vector<uint64_t> const &plaintext,
     }
     // Loop through plaintext coefficients
     for (int j = 0; j < coeff_count; j++) {
-      __uint128_t val = (__uint128_t)pt[j] * gadget_coef % mod;
+      uint128_t val = (uint128_t)pt[j] * gadget_coef % mod;
       ct[j + pad] =
           static_cast<uint64_t>((ct[j + pad] + val) % mod);
     }

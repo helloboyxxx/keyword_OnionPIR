@@ -100,7 +100,7 @@ PirQuery PirClient::generate_query(const std::uint64_t entry_index) {
   const auto coeff_mod_count = coeff_modulus.size();  // 2 here, not 3. Notice that here we use the first context_data, not all of coeff_modulus are used.
 
   // The following two for-loops calculates the powers for GSW gadgets.
-  std::vector<__uint128_t> inv(coeff_mod_count);
+  std::vector<uint128_t> inv(coeff_mod_count);
   for (int k = 0; k < coeff_mod_count; k++) {
     uint64_t result;
     seal::util::try_invert_uint_mod(bits_per_ciphertext, coeff_modulus[k], result);
@@ -123,7 +123,7 @@ PirQuery PirClient::generate_query(const std::uint64_t entry_index) {
         for (int mod_id = 0; mod_id < coeff_mod_count; mod_id++) {
           auto pad = mod_id * coeff_count;   // We use two moduli for the same gadget value. They are apart by coeff_count.
           auto coef_pos = dims_[0] + (i-1) * l + k + pad;  // the position of the coefficient in the query
-          __uint128_t mod = coeff_modulus[mod_id].value();
+          uint128_t mod = coeff_modulus[mod_id].value();
           // the coeff is (B^{l-1}, ..., B^0) / bits_per_ciphertext
           auto coef = gadget[mod_id][k] * inv[mod_id] % mod;
           q_head[coef_pos] = (q_head[coef_pos] + coef) % mod;

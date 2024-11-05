@@ -283,7 +283,7 @@ PirServer::evaluate_first_dim(std::vector<seal::Ciphertext> &selection_vector) {
 
         for (int coeff_id = 0; coeff_id < coeff_count; coeff_id++) {
           pt_ptr[coeff_id + mod_idx] =
-              pt_ptr[coeff_id + mod_idx] % static_cast<__uint128_t>(coeff_modulus[mod_id].value()); // mod operation
+              pt_ptr[coeff_id + mod_idx] % static_cast<uint128_t>(coeff_modulus[mod_id].value()); // mod operation
           ct_ptr[coeff_id + mod_idx] = static_cast<uint64_t>(pt_ptr[coeff_id + mod_idx]); // store the result in the ciphertext
         }
       }
@@ -332,7 +332,7 @@ PirServer::evaluate_first_dim2(std::vector<seal::Ciphertext> &selection_vector) 
 
         for (int coeff_id = 0; coeff_id < coeff_count; coeff_id++) {
           pt_ptr[coeff_id + mod_idx] =
-              pt_ptr[coeff_id + mod_idx] % static_cast<__uint128_t>(coeff_modulus[mod_id].value()); // mod operation
+              pt_ptr[coeff_id + mod_idx] % static_cast<uint128_t>(coeff_modulus[mod_id].value()); // mod operation
           ct_ptr[coeff_id + mod_idx] = static_cast<uint64_t>(pt_ptr[coeff_id + mod_idx]); // store the result in the ciphertext
         }
       }

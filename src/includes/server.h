@@ -9,7 +9,7 @@
 
 // typedef std::vector<std::optional<seal::Plaintext>> DatabaseChunk;  // 256 plaintexts
 typedef std::unique_ptr<std::optional<seal::Plaintext>[]> DatabaseChunk;  // Heap allocation for N_1 plaintexts
-typedef std::vector<DatabaseChunk> Database;
+typedef std::unique_ptr<std::optional<seal::Plaintext>[]> Database;       // One consecutive huge vector for the entire database on heap
 typedef std::pair<uint64_t, uint64_t> CuckooSeeds;
 
 class PirServer {
@@ -31,7 +31,7 @@ public:
   std::vector<CuckooSeeds> gen_keyword_data(size_t max_iter, uint64_t keyword_seed);
 
   // push one chunk of entry to the database
-  void push_database_chunk(std::vector<Entry> &chunk_entry);
+  void push_database_chunk(std::vector<Entry> &chunk_entry, const size_t chunk_idx);
 
   std::vector<uint64_t> get_dims() const;
 
@@ -72,7 +72,7 @@ private:
   std::vector<uint64_t> dims_;
   std::map<uint32_t, seal::GaloisKeys> client_galois_keys_;
   std::map<uint32_t, GSWCiphertext> client_gsw_keys_;
-  Database db_;
+  Database db_; // pointer to the entire database vector
   PirParams pir_params_;
   std::vector<uint64_t> mu_values_; // Barret reduction parameters
   size_t hashed_key_width_;
