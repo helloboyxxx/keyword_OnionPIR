@@ -36,10 +36,10 @@ Entry generate_entry(const uint64_t id, const size_t entry_size) {
   // rand() is not recommended for serious random-number generation needs. Therefore we need this mt19937.
   // Other methods are recommended in: 
 
-  idxToEntry(id, entry);
+  // idxToEntry(id, entry);
 
   std::mt19937_64 rng(id); 
-  for (int i = 8; i < entry_size; i++) {
+  for (int i = 0; i < entry_size; i++) {
     entry.push_back(rng() % 256); // 256 is the maximum value of a byte
   }
   return entry;
@@ -419,7 +419,7 @@ std::vector<seal::Ciphertext> PirServer::make_query(const uint32_t client_id, Pi
 
   // ========================== Post-processing ==========================
   // modulus switching so to reduce the response size by half
-  evaluator_.mod_switch_to_next_inplace(result[0]); // result.size() == 1.
+  // evaluator_.mod_switch_to_next_inplace(result[0]); // result.size() == 1.
 
   // ========================== Timing ==========================
   BENCH_PRINT("\t\tExpand time:\t" << TIME_DIFF(expand_start, expand_end) << "ms");

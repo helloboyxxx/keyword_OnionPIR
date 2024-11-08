@@ -70,16 +70,12 @@ PirQuery PirClient::generate_query(const std::uint64_t entry_index) {
   PRINT_INT_ARRAY("\t\tquery_indices", query_indices.data(), query_indices.size());
   const uint64_t coeff_count = params_.poly_modulus_degree(); // 4096
   const uint64_t msg_size = dims_[0] + pir_params_.get_l() * (dims_.size() - 1);
-  uint64_t bits_per_ciphertext = 1; // padding msg_size to the next power of 2
-  // Calculate n, the number of slots used for packing and unpacking.
-  while (bits_per_ciphertext < msg_size) {
-    bits_per_ciphertext *= 2;
-  }
+  const uint64_t bits_per_ciphertext = 1 << get_expan_height(); // padding msg_size to the next power of 2
+
+  // Algorithm 1 from the OnionPIR Paper
 
   // empty plaintext
   seal::Plaintext plain_query(coeff_count); // we allow 4096 coefficients in the plaintext polynomial to be set as suggested in the paper.
-
-  // Algorithm 1 from the OnionPIR Paper
   // We set the corresponding coefficient to the inverse so the value of the
   // expanded ciphertext will be 1
   uint64_t inverse = 0;
@@ -189,20 +185,17 @@ void PirClient::cuckoo_process_reply(uint64_t seed1, uint64_t seed2, uint64_t ta
 
 
 size_t PirClient::create_galois_keys(std::stringstream &galois_key_stream) const {
-  std::vector<uint32_t> galois_elts = {1};
+  std::vector<uint32_t> galois_elts;
 
-  // Compression factor determines how many bits there are per message (and
-  // hence the total query size), with bits per message = 2^compression_factor.
-  // For example, with compression factor = 11 and bit length = 4096, we end up
-  // with 2048 bits per message and a total query size of 2. The 2048 bits will
-  // be encoded in the first 2048 coeffs of the polynomial. 2^compression_factor
-  // must be less than or equal to polynomial modulus degree and bit_length.
-  int compression_factor = std::log2(dims_[0] + pir_params_.get_l() * (dims_.size() - 1) * 2);
-
-  size_t min_ele = params_.poly_modulus_degree() / pow(2, compression_factor) + 1;
-  for (size_t i = min_ele; i <= params_.poly_modulus_degree() + 1; i = (i - 1) * 2 + 1) {
-    galois_elts.push_back(i);
+  // This is related to the unpacking algorithm.
+  // expansion height is the height of the expansion tree such that
+  // 2^get_expan_height() is equal to the number of packed values padded to the next power of 2.
+  const int expan_height = get_expan_height();
+  const int poly_degree = params_.poly_modulus_degree();
+  for (int i = 0; i < expan_height; i++) {
+    galois_elts.push_back(1 + (poly_degree >> i));
   }
+  // PRINT_INT_ARRAY("galois_elts: ", galois_elts, galois_elts.size());
   auto written_size = keygen_->create_galois_keys(galois_elts).save(galois_key_stream);
   return written_size;
 }

@@ -40,6 +40,11 @@ public:
 
   std::vector<Ciphertext> generate_gsw_from_key();
 
+  // The height of the expansion tree during packing unpacking stages
+  inline const size_t get_expan_height() const {
+    return std::ceil(std::log2(dims_[0] + pir_params_.get_l() * (dims_.size() - 1)));
+  }
+
 private:
   seal::EncryptionParameters params_;
   PirParams pir_params_;

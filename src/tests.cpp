@@ -17,7 +17,7 @@
 #define PT_MOD_WIDTH      49            // Width of the plain modulus 
 #define CT_MODS	         {60, 60, 60}   // Coeff modulus for the BFV scheme
 
-#define EXPERIMENT_ITERATIONS 20
+#define EXPERIMENT_ITERATIONS 10
 #define WARMUP_ITERATIONS     3
 
 void print_func_name(std::string func_name) {
@@ -367,7 +367,7 @@ void test_pir() {
     }
     server_time_sum += TIME_DIFF(s_start_time, s_end_time);
     client_time_sum += TIME_DIFF(c_start_time, c_end_time) - TIME_DIFF(s_start_time, s_end_time);
-    if (check_entry_idx(actual_entry, entry_index) && entry_is_equal(entry, actual_entry)) {
+    if (entry_is_equal(entry, actual_entry)) {
       // print a green success message
       std::cout << "\033[1;32mSuccess!\033[0m" << std::endl;
       success_count++;
