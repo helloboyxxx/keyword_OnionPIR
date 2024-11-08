@@ -189,7 +189,7 @@ $$
 $$
 English: we first decompose the RLWE ciphertext, and then multiply it with RGSW.
 
-> In the context of external product, $\text{Decomp}_G(v) \in R^{1\times2l}, G \in R^{2l \times 2}$.
+> In the context of external product, $\text{Decomp}_G(v) \in R^{1\times2l}, A \in R^{2l \times 2}$.
 
 #### Proof sketch
 

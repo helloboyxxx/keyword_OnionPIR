@@ -40,7 +40,7 @@ namespace utils {
     Helper function for multiply_poly_acum. Multiplies two operands together and
    stores the result in product_acum.
 */
-inline void multiply_acum(uint64_t op1, uint64_t op2, uint128_t &product_acum) {
+inline void multiply_acum(const uint64_t op1, const uint64_t op2, uint128_t &product_acum) {
   product_acum = product_acum + static_cast<uint128_t>(op1) * static_cast<uint128_t>(op2);
 }
 
@@ -52,7 +52,7 @@ inline void multiply_acum(uint64_t op1, uint64_t op2, uint128_t &product_acum) {
     @param size - Number of polynomial coefficients
     @param result - Pointer to the start of the data of the result polynomial
 */
-inline void multiply_poly_acum(const uint64_t *ct_ptr, const uint64_t *pt_ptr, size_t size,
+inline void multiply_poly_acum(const uint64_t *ct_ptr, const uint64_t *pt_ptr, const size_t size,
                                uint128_t *result) {
   for (size_t cc = 0; cc < size; cc += 32) {
     multiply_acum(ct_ptr[cc], pt_ptr[cc], result[cc]);

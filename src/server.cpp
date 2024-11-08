@@ -144,71 +144,64 @@ std::vector<CuckooSeeds> PirServer::gen_keyword_data(size_t max_iter, uint64_t k
 }
 
 
-
-// Computes a dot product between the selection vector and the database for the
-// first dimension with a delayed modulus optimization. Selection vector should
+// Computes a dot product between the fst_dim_query and the database for the
+// first dimension with a delayed modulus optimization. fst_dim_query should
 // be transformed to ntt.
 std::vector<seal::Ciphertext>
-PirServer::evaluate_first_dim(std::vector<seal::Ciphertext> &selection_vector) {
+PirServer::evaluate_first_dim(std::vector<seal::Ciphertext> &fst_dim_query) {
   const size_t fst_dim_sz = dims_[0];  // number of entries in the first dimension
   const size_t other_dim_sz = DBSize_ / fst_dim_sz;  // number of entries in the other dimensions
-  const auto seal_params = context_.get_context_data(selection_vector[0].parms_id())->parms();
+  const auto seal_params = context_.get_context_data(fst_dim_query[0].parms_id())->parms();
   const auto coeff_modulus = seal_params.coeff_modulus();
-  const size_t coeff_count = seal_params.poly_modulus_degree();
+  const size_t poly_degree = seal_params.poly_modulus_degree();
   const size_t coeff_mod_count = coeff_modulus.size();
-  const size_t coeff_val_cnt = coeff_count * coeff_mod_count;
-  constexpr size_t num_poly = 2;  // number of polynomials in the ciphertext
+  const size_t coeff_val_cnt = poly_degree * coeff_mod_count; // polydegree * RNS moduli count
+  constexpr size_t num_poly = 2;  // ciphertext has two polynomials
   
-
-  // transform the selection vector to ntt, store into a vector
-  for (size_t i = 0; i < selection_vector.size(); i++) {
-    evaluator_.transform_to_ntt_inplace(selection_vector[i]);
+  // transform the selection vector to ntt form
+  for (size_t i = 0; i < fst_dim_query.size(); i++) {
+    evaluator_.transform_to_ntt_inplace(fst_dim_query[i]);
   }
 
-  // copy the ciphertext data to a new vector with contiguous memory
-  std::vector<uint64_t> selec_vec_ntt;
-  selec_vec_ntt.reserve(fst_dim_sz * num_poly * coeff_val_cnt);
-  for (size_t poly_id = 0; poly_id < num_poly; poly_id++){
-    for (size_t k = 0; k < fst_dim_sz; k++) {
-      auto ct_ptr = selection_vector[k].data(poly_id); // pointer to the data of the ciphertext
-      for (int elem_id = 0; elem_id < coeff_val_cnt; elem_id++) {
-        selec_vec_ntt.push_back(static_cast<uint64_t>(ct_ptr[elem_id]));
-      }
-    }
-  }
+  std::vector<seal::Ciphertext> result; // output vector
+  result.reserve(other_dim_sz);
+  seal::Ciphertext ct_acc;
 
   // I imagine DB as a (other_dim_sz * fst_dim_sz) matrix, each column is
   // other_dim_sz many consecutive entries in the database. We are going to
   // multiply the selection_vector with the DB. Then only one row of the result
   // is going to be added to the result vector.
-  std::vector<uint128_t> buffer(coeff_val_cnt * num_poly, 0);
-  std::vector<Ciphertext> result(other_dim_sz, selection_vector[0]);
   for (size_t j = 0; j < other_dim_sz; ++j) {
-    // reset the buffer
-    std::fill(buffer.begin(), buffer.end(), 0);
+    // Buffer to store the accumulated values. We will calculate the modulus afterwards.
+    std::vector<std::vector<uint128_t>> buffer(num_poly, std::vector<uint128_t>(coeff_val_cnt, 0));
     // summing C_{BFV_k} * DB_{N_1 * j + k}
-    for (size_t poly_id = 0; poly_id < num_poly; poly_id++) {
-      for (size_t k = 0; k < fst_dim_sz; k++) {
-        // want to pass selection_vector[k].data(poly_id)
-        auto selec_vec_shift = poly_id * fst_dim_sz * coeff_val_cnt + k * coeff_val_cnt;
-        utils::multiply_poly_acum(selec_vec_ntt.data() + selec_vec_shift,
+    for (size_t k = 0; k < fst_dim_sz; k++) {
+      for (size_t poly_id = 0; poly_id < num_poly; poly_id++) {
+        utils::multiply_poly_acum(fst_dim_query[k].data(poly_id),
                                   (*db_[fst_dim_sz * j + k]).data(),
-                                  coeff_val_cnt, buffer.data() + poly_id * coeff_val_cnt);
+                                  coeff_val_cnt, buffer[poly_id].data());
       }
-      auto ct_ptr = result[j].data(poly_id); // pointer to the data of the ciphertext
-      auto pt_ptr = buffer.data() + poly_id * coeff_val_cnt;  // pointer to the buffer data
-      for (int mod_id = 0; mod_id < coeff_mod_count; mod_id++) {
-        auto mod_idx = (mod_id * coeff_count);
-        for (int coeff_id = 0; coeff_id < coeff_count; coeff_id++) {
-          auto x = pt_ptr[coeff_id + mod_idx];
+    }
+    ct_acc = fst_dim_query[fst_dim_sz - 1]; // just a quick way to construct a new ciphertext. Will overwrite data in it.
+    for (size_t poly_id = 0; poly_id < num_poly; poly_id++) {   // Each ciphertext has two polynomials
+      auto mod_acc_ptr = ct_acc.data(poly_id); // pointer to store the modulus of accumulated value
+      auto buff_ptr = buffer[poly_id];  // pointer to the buffer data
+      
+      for (int mod_id = 0; mod_id < coeff_mod_count; mod_id++) {  // RNS has two moduli
+        // Now we calculate the modulus for the accumulated value.
+        auto rns_padding = (mod_id * poly_degree);
+        for (int coeff_id = 0; coeff_id < poly_degree; coeff_id++) {  // for each coefficient, we mod it with RNS modulus
+          // the following is equivalent to: mod_acc_ptr[coeff_id + rns_padding] = buff_ptr[coeff_id + rns_padding] % coeff_modulus[mod_id]
+          auto x = buff_ptr[coeff_id + rns_padding];
           uint64_t raw[2] = {static_cast<uint64_t>(x), static_cast<uint64_t>(x >> 64)};
-          ct_ptr[coeff_id + mod_idx] = util::barrett_reduce_128(raw, coeff_modulus[mod_id]);
+          mod_acc_ptr[coeff_id + rns_padding] = util::barrett_reduce_128(raw, coeff_modulus[mod_id]);
         }
       }
     }
-    evaluator_.transform_from_ntt_inplace(result[j]);  // transform
+    evaluator_.transform_from_ntt_inplace(ct_acc);  // transform the result back to coefficient form
+    result.push_back(ct_acc);
   }
-  
+
   return result;
 }
 

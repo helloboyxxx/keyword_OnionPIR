@@ -4,10 +4,9 @@
 #include "server.h"
 #include "utils.h"
 #include <cassert>
-#include <fstream>
 #include <iostream>
-#include <random>
 #include <bitset>
+#include <fstream>
 
 // "Default" Parameters for the PIR scheme
 #define DB_SZ             1 << 15       // Database size <==> Number of plaintexts in the database
@@ -358,14 +357,14 @@ void test_pir() {
     Entry actual_entry = server.direct_get_entry(entry_index);
 
     // ============= PRINTING RESULTS ===============    
+    BENCH_PRINT("\t\tServer time:\t" << TIME_DIFF(s_start_time, s_end_time) << " ms");
+    BENCH_PRINT("\t\tClient Time:\t" << TIME_DIFF(c_start_time, c_end_time) - TIME_DIFF(s_start_time, s_end_time) << " ms"); 
+    DEBUG_PRINT("\t\tNoise budget:\t" << client.get_decryptor()->invariant_noise_budget(result[0]));
+    
     if (i < WARMUP_ITERATIONS) {
       PRINT_BAR;
       continue;
     }
-    BENCH_PRINT("\t\tServer time:\t" << TIME_DIFF(s_start_time, s_end_time) << " ms");
-    BENCH_PRINT("\t\tClient Time:\t" << TIME_DIFF(c_start_time, c_end_time) - TIME_DIFF(s_start_time, s_end_time) << " ms"); 
-    DEBUG_PRINT("\t\tNoise budget:\t" << client.get_decryptor()->invariant_noise_budget(result[0]));
-
     server_time_sum += TIME_DIFF(s_start_time, s_end_time);
     client_time_sum += TIME_DIFF(c_start_time, c_end_time) - TIME_DIFF(s_start_time, s_end_time);
     if (check_entry_idx(actual_entry, entry_index) && entry_is_equal(entry, actual_entry)) {
