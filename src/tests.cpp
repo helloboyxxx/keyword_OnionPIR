@@ -12,10 +12,10 @@
 #define DB_SZ             1 << 15       // Database size <==> Number of plaintexts in the database
 #define NUM_ENTRIES       1 << 15       // Number of entries in the database, can be less than DB_SZ
 #define GSW_L             4             // Parameter for GSW scheme. 
-#define GSW_L_KEY         9             // GSW for query expansion
+#define GSW_L_KEY         30             // GSW for query expansion
 #define FST_DIM_SZ        256           // Number of dimensions of the hypercube
-#define PT_MOD_WIDTH      49            // Width of the plain modulus 
-#define CT_MODS	         {60, 60, 60}   // Coeff modulus for the BFV scheme
+#define PT_MOD_WIDTH      16            // Width of the plain modulus 
+#define CT_MODS	         {60, 60}   // Coeff modulus for the BFV scheme
 
 #define EXPERIMENT_ITERATIONS 10
 #define WARMUP_ITERATIONS     3
@@ -359,7 +359,7 @@ void test_pir() {
     // ============= PRINTING RESULTS ===============    
     BENCH_PRINT("\t\tServer time:\t" << TIME_DIFF(s_start_time, s_end_time) << " ms");
     BENCH_PRINT("\t\tClient Time:\t" << TIME_DIFF(c_start_time, c_end_time) - TIME_DIFF(s_start_time, s_end_time) << " ms"); 
-    DEBUG_PRINT("\t\tNoise budget:\t" << client.get_decryptor()->invariant_noise_budget(result[0]));
+    BENCH_PRINT("\t\tNoise budget:\t" << client.get_decryptor()->invariant_noise_budget(result[0]));
     
     if (i < WARMUP_ITERATIONS) {
       PRINT_BAR;

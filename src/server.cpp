@@ -29,8 +29,7 @@ PirServer::~PirServer() {
 
 
 Entry generate_entry(const uint64_t id, const size_t entry_size) {
-  Entry entry;
-  entry.resize(entry_size); // reserving enough space will help reduce the number of reallocations.
+  Entry entry(entry_size);
 
   // use the random file in ther kernal
   std::ifstream random_file("/dev/urandom", std::ios::binary);
@@ -453,7 +452,9 @@ std::vector<seal::Ciphertext> PirServer::make_query(const uint32_t client_id, Pi
 
   // ========================== Post-processing ==========================
   // modulus switching so to reduce the response size by half
-  // evaluator_.mod_switch_to_next_inplace(result[0]); // result.size() == 1.
+  if(pir_params_.get_seal_params().coeff_modulus().size() > 2) {
+    evaluator_.mod_switch_to_next_inplace(result[0]); // result.size() == 1.
+  }
 
   // ========================== Timing ==========================
   BENCH_PRINT("\t\tExpand time:\t" << TIME_DIFF(expand_start, expand_end) << "ms");
