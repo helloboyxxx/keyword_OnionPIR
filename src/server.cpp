@@ -205,6 +205,41 @@ PirServer::evaluate_first_dim(std::vector<seal::Ciphertext> &fst_dim_query) {
   return result;
 }
 
+
+std::vector<seal::Ciphertext>
+PirServer::evaluate_first_dim_direct_mod(std::vector<seal::Ciphertext> &fst_dim_query) {
+  const size_t fst_dim_sz = dims_[0];  // number of entries in the first dimension
+  const size_t other_dim_sz = DBSize_ / fst_dim_sz;  // number of entries in the other dimensions
+  
+  // transform the selection vector to ntt form
+  for (size_t i = 0; i < fst_dim_query.size(); i++) {
+    evaluator_.transform_to_ntt_inplace(fst_dim_query[i]);
+  }
+
+  std::vector<seal::Ciphertext> result(other_dim_sz); // output vector
+  seal::Ciphertext temp;
+
+  // I imagine DB as a (other_dim_sz * fst_dim_sz) matrix, each column is
+  // other_dim_sz many consecutive entries in the database. We are going to
+  // multiply the selection_vector with the DB. Then only one row of the result
+  // is going to be added to the result vector.
+  for (size_t j = 0; j < other_dim_sz; ++j) {
+    // summing C_{BFV_k} * DB_{N_1 * j + k}
+    evaluator_.multiply_plain(fst_dim_query[0], db_[fst_dim_sz * j].value(), result[j]);
+    for (size_t k = 1; k < fst_dim_sz; k++) {
+      evaluator_.multiply_plain(fst_dim_query[k], db_[fst_dim_sz * j + k].value(), temp);
+      evaluator_.add_inplace(result[j], temp);
+    }
+  }
+  // transform the result to coefficient form
+  for (size_t i = 0; i < result.size(); i++) {
+    evaluator_.transform_from_ntt_inplace(result[i]);
+  }
+
+  return result;
+}
+
+
 void PirServer::evaluate_gsw_product(std::vector<seal::Ciphertext> &result,
                                                               GSWCiphertext &selection_cipher) {
   

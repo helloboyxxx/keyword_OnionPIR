@@ -87,6 +87,7 @@ private:
     database.
   */
   std::vector<seal::Ciphertext> evaluate_first_dim(std::vector<seal::Ciphertext> &selection_vector);
+  std::vector<seal::Ciphertext> evaluate_first_dim_direct_mod(std::vector<seal::Ciphertext> &selection_vector);
 
   /*!
     Transforms the plaintexts in the database into their NTT representation.
