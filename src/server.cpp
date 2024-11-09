@@ -30,18 +30,16 @@ PirServer::~PirServer() {
 
 Entry generate_entry(const uint64_t id, const size_t entry_size) {
   Entry entry;
-  entry.reserve(entry_size); // reserving enough space will help reduce the number of reallocations.
-  // rng here is a pseudo-random number generator: https://en.cppreference.com/w/cpp/numeric/random/mersenne_twister_engine
-  // According to the notes in: https://en.cppreference.com/w/cpp/numeric/random/rand, 
-  // rand() is not recommended for serious random-number generation needs. Therefore we need this mt19937.
-  // Other methods are recommended in: 
+  entry.resize(entry_size); // reserving enough space will help reduce the number of reallocations.
 
-  // idxToEntry(id, entry);
-
-  std::mt19937_64 rng(id); 
-  for (int i = 0; i < entry_size; i++) {
-    entry.push_back(rng() % 256); // 256 is the maximum value of a byte
+  // use the random file in ther kernal
+  std::ifstream random_file("/dev/urandom", std::ios::binary);
+  if (!random_file.is_open()) {
+    throw std::invalid_argument("Unable to open /dev/urandom for reading");
   }
+  entry.resize(entry_size);
+  random_file.read(reinterpret_cast<char *>(entry.data()), entry_size);
+  random_file.close();
   return entry;
 }
 
@@ -206,6 +204,7 @@ PirServer::evaluate_first_dim(std::vector<seal::Ciphertext> &fst_dim_query) {
 }
 
 
+// NO, THIS IS TOO SLOW.
 std::vector<seal::Ciphertext>
 PirServer::evaluate_first_dim_direct_mod(std::vector<seal::Ciphertext> &fst_dim_query) {
   const size_t fst_dim_sz = dims_[0];  // number of entries in the first dimension
