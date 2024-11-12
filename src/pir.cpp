@@ -33,9 +33,9 @@ PirParams::PirParams(const uint64_t DBSize, const uint64_t first_dim_sz,
   seal_params_.set_plain_modulus(pt_mod);
 
   // =============== VALIDATION ===============
-  if (first_dim_sz < 128) {
-    throw std::invalid_argument("Size of first dimension is too small");
-  }
+  // if (first_dim_sz < 128) {
+  //   throw std::invalid_argument("Size of first dimension is too small");
+  // }
   // make sure if the first dimension is a power of 2.
   if ((first_dim_sz & (first_dim_sz - 1))) {
     throw std::invalid_argument("Size of database is not a power of 2");

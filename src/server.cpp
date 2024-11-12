@@ -453,6 +453,7 @@ std::vector<seal::Ciphertext> PirServer::make_query(const uint32_t client_id, Pi
   // ========================== Post-processing ==========================
   // modulus switching so to reduce the response size by half
   if(pir_params_.get_seal_params().coeff_modulus().size() > 2) {
+    DEBUG_PRINT("Modulus switching...");
     evaluator_.mod_switch_to_next_inplace(result[0]); // result.size() == 1.
   }
 

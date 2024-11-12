@@ -9,13 +9,34 @@
 #include <fstream>
 
 // "Default" Parameters for the PIR scheme
-#define DB_SZ             1 << 15       // Database size <==> Number of plaintexts in the database
-#define NUM_ENTRIES       1 << 15       // Number of entries in the database, can be less than DB_SZ
-#define GSW_L             4             // Parameter for GSW scheme. 
-#define GSW_L_KEY         30             // GSW for query expansion
+// #define DB_SZ             1 << 16       // Database size <==> Number of plaintexts in the database
+// #define NUM_ENTRIES       1 << 16       // Number of entries in the database, can be less than DB_SZ
+// #define GSW_L             4             // Parameter for GSW scheme. 
+// #define GSW_L_KEY         9             // GSW for query expansion
+// #define FST_DIM_SZ        256           // Number of dimensions of the hypercube
+// #define PT_MOD_WIDTH      49            // Width of the plain modulus 
+// #define CT_MODS	         {60, 60, 60}   // Coeff modulus for the BFV scheme
+
+
+// "Small" Parameters for the PIR scheme
+#define DB_SZ             1 << 16       // Database size <==> Number of plaintexts in the database
+#define NUM_ENTRIES       1 << 16       // Number of entries in the database, can be less than DB_SZ
+#define GSW_L             5             // Parameter for GSW scheme. 
+#define GSW_L_KEY         20             // GSW for query expansion
 #define FST_DIM_SZ        256           // Number of dimensions of the hypercube
-#define PT_MOD_WIDTH      16            // Width of the plain modulus 
+#define PT_MOD_WIDTH      17            // Width of the plain modulus 
 #define CT_MODS	         {60, 60}   // Coeff modulus for the BFV scheme
+
+
+// "warmup" parameters
+// #define DB_SZ             1 << 16       // Database size <==> Number of plaintexts in the database
+// #define NUM_ENTRIES       1 << 16       // Number of entries in the database, can be less than DB_SZ
+// #define GSW_L             5             // Parameter for GSW scheme. 
+// #define GSW_L_KEY         20             // GSW for query expansion
+// #define FST_DIM_SZ        2           // Number of dimensions of the hypercube
+// #define PT_MOD_WIDTH      17            // Width of the plain modulus 
+// #define CT_MODS	         {60, 60}   // Coeff modulus for the BFV scheme
+
 
 #define EXPERIMENT_ITERATIONS 10
 #define WARMUP_ITERATIONS     3
@@ -309,6 +330,7 @@ void test_pir() {
   size_t galois_key_size = 0;
   size_t gsw_key_size = 0;
   size_t query_size = 0;
+  size_t response_size = 0;
 
   // Run the query process many times.
   srand(time(0)); // reset the seed for the random number generator
@@ -346,12 +368,18 @@ void test_pir() {
     auto s_start_time = CURR_TIME;  // server start time for processing the query
     auto result = server.make_seeded_query(client_id, data_stream);
     auto s_end_time = CURR_TIME;
-    
+
+
+    // ============= CLIENT ===============
     // client gets result from the server and decrypts it
     auto decrypted_result = client.decrypt_result(result);
     Entry entry = client.get_entry_from_plaintext(entry_index, decrypted_result[0]);
     auto c_end_time = CURR_TIME;
 
+    // write the result to the stream to test the size
+    std::stringstream result_stream;
+    response_size = result[0].save(result_stream);
+    result_stream.str(std::string()); // clear the stream
 
     // Directly get the plaintext from server. Not part of PIR.
     Entry actual_entry = server.direct_get_entry(entry_index);
@@ -384,16 +412,15 @@ void test_pir() {
   }
 
   auto avg_server_time = server_time_sum / EXPERIMENT_ITERATIONS;
-  std::cout << "Average server time: " << avg_server_time << " ms" << std::endl;
-  std::cout << "Average client time: " << client_time_sum / EXPERIMENT_ITERATIONS << " ms" << std::endl;
-  std::cout << "galois key size: " << galois_key_size << " bytes" << std::endl;
-  std::cout << "gsw key size: " << gsw_key_size << " bytes" << std::endl;
-  std::cout << "total key size: " << static_cast<double>(galois_key_size + gsw_key_size) / 1024 / 1024 << "MB" << std::endl;
-  std::cout << "query size: " << query_size << " bytes" << std::endl;
-  std::cout << "Throughput: "
-            << pir_params.get_DBSize_MB() / (static_cast<double>(avg_server_time) / 1000)
-            << " MB/s" << std::endl;
-  std::cout << "Success rate: " << success_count << "/" << EXPERIMENT_ITERATIONS << std::endl;
+  BENCH_PRINT("Average server time: " << avg_server_time << " ms");
+  BENCH_PRINT("Average client time: " << client_time_sum / EXPERIMENT_ITERATIONS << " ms");
+  BENCH_PRINT("galois key size: " << galois_key_size << " bytes");
+  BENCH_PRINT("gsw key size: " << gsw_key_size << " bytes");
+  BENCH_PRINT("total key size: " << static_cast<double>(galois_key_size + gsw_key_size) / 1024 / 1024 << "MB");
+  BENCH_PRINT("query size: " << query_size << " bytes");
+  BENCH_PRINT("response size: " << response_size << " bytes");
+  BENCH_PRINT("Throughput: " << pir_params.get_DBSize_MB() / (static_cast<double>(avg_server_time) / 1000) << " MB/s");
+  BENCH_PRINT("Success rate: " << success_count << "/" << EXPERIMENT_ITERATIONS);
 }
 
 
