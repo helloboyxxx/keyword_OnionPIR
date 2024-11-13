@@ -30,7 +30,7 @@ public:
    */
   std::vector<CuckooSeeds> gen_keyword_data(size_t max_iter, uint64_t keyword_seed);
 
-  // push one chunk of entry to the database
+  // push one chunk of entry to the given database
   void push_database_chunk(std::vector<Entry> &chunk_entry, const size_t chunk_idx);
 
   std::vector<uint64_t> get_dims() const;
@@ -73,6 +73,7 @@ private:
   std::map<uint32_t, seal::GaloisKeys> client_galois_keys_;
   std::map<uint32_t, GSWCiphertext> client_gsw_keys_;
   Database db_; // pointer to the entire database vector
+  std::vector<uint128_t> inter_res; // pointer to the intermediate result vector for fst dim
   PirParams pir_params_;
   std::vector<uint64_t> mu_values_; // Barret reduction parameters
   size_t hashed_key_width_;
@@ -95,6 +96,9 @@ private:
   */
   void preprocess_ntt();
 
+  // Fill the intermediate_db_ with some ciphertext. We just need to allocate the memory.
+  void fill_inter_res();
+
   // write one chunk of the database to a binary file in CACHE_DIR
   void write_one_chunk(std::vector<Entry> &chunk);
 };
@@ -108,7 +112,7 @@ private:
 * @param len length(size) of the entry. Each entry is a vector of bytes.
 * @return Entry 
 */
-Entry generate_entry(const uint64_t id, const size_t entry_size);
+Entry generate_entry(const uint64_t id, const size_t entry_size, std::ifstream &random_file);
 
 /**
  * @brief Generate an entry with a key_id. This will be used as a seed for
