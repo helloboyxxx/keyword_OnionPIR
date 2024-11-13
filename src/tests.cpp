@@ -17,8 +17,8 @@
 #define PT_MOD_WIDTH      49            // Width of the plain modulus 
 #define CT_MODS	         {60, 60, 60}   // Coeff modulus for the BFV scheme
 
-#define EXPERIMENT_ITERATIONS 10
-#define WARMUP_ITERATIONS     3
+#define EXPERIMENT_ITERATIONS 20
+#define WARMUP_ITERATIONS     5
 
 
 // // "Small" Parameters for the PIR scheme

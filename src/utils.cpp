@@ -186,14 +186,20 @@ bool entry_is_equal(const Entry &entry1, const Entry &entry2) {
   return true;
 }
 
-size_t entry_idx_to_actual(const size_t entry_idx, const size_t fst_dim_sz, const size_t db_sz) {
+size_t entry_idx_to_actual(const size_t entry_idx, const size_t fst_dim_sz, const size_t db_sz, const size_t tile_size) {
   // compute N / N_1
   size_t other_dim_sz = db_sz / fst_dim_sz;
 
-  // we remap (N/N_1) * k + j to k + j * N_1
+  // we remap (N/N_1) * k + j to k + j * N_1. 
+  // Then k + j * N_1 is again remapped to (N/N_1)*k * (k/t) + j*t + k mod t
   size_t k = entry_idx / other_dim_sz;
   size_t j = entry_idx % other_dim_sz;
-  return k + j * fst_dim_sz;
+
+  DEBUG_PRINT("j: " << j << " k: " << k);
+  DEBUG_PRINT("intermediate: " << k + j * fst_dim_sz);
+
+  return other_dim_sz * tile_size * (k / tile_size) + j * tile_size + k % tile_size;
+  // return k + j * fst_dim_sz;
 }
 
 void print_progress(size_t current, size_t total) {

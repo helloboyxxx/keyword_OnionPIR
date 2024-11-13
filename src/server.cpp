@@ -173,23 +173,21 @@ PirServer::evaluate_first_dim(std::vector<seal::Ciphertext> &fst_dim_query) {
   */
 
   const size_t one_ct_size = num_poly * coeff_val_cnt;
-  const size_t tile_size = 8;
-
-  for (size_t k_base = 0; k_base < fst_dim_sz; k_base += tile_size) {
+  size_t db_idx = 0;
+  for (size_t k_base = 0; k_base < fst_dim_sz; k_base += tile_size_) {
     for (size_t j = 0; j < other_dim_sz; ++j) {
-      for (size_t k = k_base; k < std::min(k_base + tile_size, fst_dim_sz); k++) {
+      for (size_t k = k_base; k < std::min(k_base + tile_size_, fst_dim_sz); k++) {
         for (size_t poly_id = 0; poly_id < num_poly; poly_id++) {
           // j are already filled with the results
           auto inter_shift = j * one_ct_size + poly_id * coeff_val_cnt;
           utils::multiply_poly_acum(fst_dim_query[k].data(poly_id),
-                                    (*db_[fst_dim_sz * j + k]).data(),
+                                    (*db_[db_idx]).data(),
                                     coeff_val_cnt, inter_res.data() + inter_shift);
         }
+        ++db_idx;
       }
     }
   }
-
-
 
 
   // for (size_t j = 0; j < other_dim_sz; ++j) {
@@ -364,7 +362,8 @@ void PirServer::set_client_gsw_key(const uint32_t client_id, std::stringstream &
 
 Entry PirServer::direct_get_entry(const uint64_t abstract_idx) {
   // Calculate the actual index based on the abstract index
-  auto actual_idx = entry_idx_to_actual(abstract_idx, dims_[0], DBSize_);
+  auto actual_idx = entry_idx_to_actual(abstract_idx, dims_[0], DBSize_, tile_size_);
+  DEBUG_PRINT("Actual index: " << actual_idx);
 
   // read the entry from raw_db_file
   std::ifstream in_file(RAW_DB_FILE, std::ios::binary);

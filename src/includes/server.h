@@ -77,6 +77,7 @@ private:
   PirParams pir_params_;
   std::vector<uint64_t> mu_values_; // Barret reduction parameters
   size_t hashed_key_width_;
+  size_t tile_size_ = 32; // TODO: make this configurable
 
   /*!
     Expands the first query ciphertext into a selection vector of ciphertexts
