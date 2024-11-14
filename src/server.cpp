@@ -21,6 +21,8 @@ PirServer::PirServer(const PirParams &pir_params)
   db_ = std::make_unique<std::optional<seal::Plaintext>[]>(DBSize_);
   fill_inter_res();
 
+  BENCH_PRINT("tile_size: " << tile_size_);
+
 }
 
 PirServer::~PirServer() {
@@ -155,6 +157,7 @@ PirServer::evaluate_first_dim(std::vector<seal::Ciphertext> &fst_dim_query) {
   const size_t coeff_mod_count = coeff_modulus.size();
   const size_t coeff_val_cnt = poly_degree * coeff_mod_count; // polydegree * RNS moduli count
   constexpr size_t num_poly = 2;  // ciphertext has two polynomials
+  const size_t one_ct_size = num_poly * coeff_val_cnt;  // 16384
   
   // transform the selection vector to ntt form
   for (size_t i = 0; i < fst_dim_query.size(); i++) {
@@ -164,6 +167,17 @@ PirServer::evaluate_first_dim(std::vector<seal::Ciphertext> &fst_dim_query) {
   // fill the intermediate result with zeros
   std::fill(inter_res.begin(), inter_res.end(), 0);
 
+  // quick test: put fst_dim_query data together in a single long vector
+  std::vector<uint64_t> fst_dim_data(fst_dim_sz * one_ct_size); // 4194304
+  for (size_t k = 0; k < fst_dim_sz; k++) {
+    for (size_t poly_id = 0; poly_id < num_poly; poly_id++) {
+      auto shift = k * one_ct_size + poly_id * coeff_val_cnt;
+      std::copy(fst_dim_query[k].data(poly_id),
+                fst_dim_query[k].data(poly_id) + coeff_val_cnt,
+                fst_dim_data.begin() + shift);
+    }
+  }
+
   /*
   I imagine DB as a (other_dim_sz * fst_dim_sz) matrix, each column is
   other_dim_sz many consecutive entries in the database. We are going to
@@ -172,35 +186,21 @@ PirServer::evaluate_first_dim(std::vector<seal::Ciphertext> &fst_dim_query) {
   The high level is summing C_{BFV_k} * DB_{N_1 * j + k}
   */
 
-  const size_t one_ct_size = num_poly * coeff_val_cnt;
   size_t db_idx = 0;
   for (size_t k_base = 0; k_base < fst_dim_sz; k_base += tile_size_) {
     for (size_t j = 0; j < other_dim_sz; ++j) {
-      for (size_t k = k_base; k < std::min(k_base + tile_size_, fst_dim_sz); k++) {
-        for (size_t poly_id = 0; poly_id < num_poly; poly_id++) {
-          // j are already filled with the results
-          auto inter_shift = j * one_ct_size + poly_id * coeff_val_cnt;
-          utils::multiply_poly_acum(fst_dim_query[k].data(poly_id),
-                                    (*db_[db_idx]).data(),
-                                    coeff_val_cnt, inter_res.data() + inter_shift);
-        }
-        ++db_idx;
+      for (size_t k = k_base; k < k_base + tile_size_; k++) {
+        utils::multiply_poly_acum( // poly_id = 0
+            fst_dim_data.data() + (k * one_ct_size), (*db_[db_idx]).data(),
+            coeff_val_cnt, &inter_res[j * one_ct_size]);
+        utils::multiply_poly_acum( // poly_id = 1
+            fst_dim_data.data() + (k * one_ct_size + coeff_val_cnt),
+            (*db_[db_idx]).data(), coeff_val_cnt,
+            &inter_res[j * one_ct_size + coeff_val_cnt]);
+        db_idx++;
       }
     }
   }
-
-
-  // for (size_t j = 0; j < other_dim_sz; ++j) {
-  //   for (size_t k = 0; k < fst_dim_sz; k++) {
-  //     for (size_t poly_id = 0; poly_id < num_poly; poly_id++) {
-  //       // j are already filled with the results
-  //       auto inter_shift = j * one_ct_size + poly_id * coeff_val_cnt;
-  //       utils::multiply_poly_acum(fst_dim_query[k].data(poly_id),
-  //                                 (*db_[fst_dim_sz * j + k]).data(),
-  //                                 coeff_val_cnt, inter_res.data() + inter_shift);
-  //     }
-  //   }
-  // }
 
   // ========== transform the intermediate to coefficient form. Delay the modulus operation ==========
   std::vector<seal::Ciphertext> result; // output vector
@@ -231,6 +231,66 @@ PirServer::evaluate_first_dim(std::vector<seal::Ciphertext> &fst_dim_query) {
 
   return result;
 }
+
+std::vector<seal::Ciphertext> PirServer::evaluate_first_dim_no_tiling(std::vector<seal::Ciphertext> &fst_dim_query) {
+  const size_t fst_dim_sz = dims_[0];  // number of entries in the first dimension
+  const size_t other_dim_sz = DBSize_ / fst_dim_sz;  // number of entries in the other dimensions
+  const auto seal_params = context_.get_context_data(fst_dim_query[0].parms_id())->parms();
+  const auto coeff_modulus = seal_params.coeff_modulus();
+  const size_t poly_degree = seal_params.poly_modulus_degree();
+  const size_t coeff_mod_count = coeff_modulus.size();
+  const size_t coeff_val_cnt = poly_degree * coeff_mod_count; // polydegree * RNS moduli count
+  constexpr size_t num_poly = 2;  // ciphertext has two polynomials
+  
+  // transform the selection vector to ntt form
+  for (size_t i = 0; i < fst_dim_query.size(); i++) {
+    evaluator_.transform_to_ntt_inplace(fst_dim_query[i]);
+  }
+
+  std::vector<seal::Ciphertext> result; // output vector
+  result.reserve(other_dim_sz);
+  seal::Ciphertext ct_acc;
+
+  // I imagine DB as a (other_dim_sz * fst_dim_sz) matrix, each column is
+  // other_dim_sz many consecutive entries in the database. We are going to
+  // multiply the selection_vector with the DB. Then only one row of the result
+  // is going to be added to the result vector.
+  for (size_t j = 0; j < other_dim_sz; ++j) {
+    // Buffer to store the accumulated values. We will calculate the modulus afterwards.
+    std::vector<std::vector<uint128_t>> buffer(num_poly, std::vector<uint128_t>(coeff_val_cnt, 0));
+    // summing C_{BFV_k} * DB_{N_1 * j + k}
+    for (size_t k = 0; k < fst_dim_sz; k++) {
+      for (size_t poly_id = 0; poly_id < num_poly; poly_id++) {
+        utils::multiply_poly_acum(fst_dim_query[k].data(poly_id),
+                                  (*db_[fst_dim_sz * j + k]).data(),
+                                  coeff_val_cnt, buffer[poly_id].data());
+      }
+    }
+    ct_acc = fst_dim_query[fst_dim_sz - 1]; // just a quick way to construct a new ciphertext. Will overwrite data in it.
+    for (size_t poly_id = 0; poly_id < num_poly; poly_id++) {   // Each ciphertext has two polynomials
+      auto mod_acc_ptr = ct_acc.data(poly_id); // pointer to store the modulus of accumulated value
+      auto buff_ptr = buffer[poly_id];  // pointer to the buffer data
+      
+      for (int mod_id = 0; mod_id < coeff_mod_count; mod_id++) {  // RNS has two moduli
+        // Now we calculate the modulus for the accumulated value.
+        auto rns_padding = (mod_id * poly_degree);
+        for (int coeff_id = 0; coeff_id < poly_degree; coeff_id++) {  // for each coefficient, we mod it with RNS modulus
+          // the following is equivalent to: mod_acc_ptr[coeff_id + rns_padding] = buff_ptr[coeff_id + rns_padding] % coeff_modulus[mod_id]
+          auto x = buff_ptr[coeff_id + rns_padding];
+          uint64_t raw[2] = {static_cast<uint64_t>(x), static_cast<uint64_t>(x >> 64)};
+          mod_acc_ptr[coeff_id + rns_padding] = util::barrett_reduce_128(raw, coeff_modulus[mod_id]);
+        }
+      }
+    }
+    evaluator_.transform_from_ntt_inplace(ct_acc);  // transform the result back to coefficient form
+    result.push_back(ct_acc);
+  }
+
+  return result;
+}
+
+
+
 
 
 // NO, THIS IS TOO SLOW.
@@ -363,7 +423,6 @@ void PirServer::set_client_gsw_key(const uint32_t client_id, std::stringstream &
 Entry PirServer::direct_get_entry(const uint64_t abstract_idx) {
   // Calculate the actual index based on the abstract index
   auto actual_idx = entry_idx_to_actual(abstract_idx, dims_[0], DBSize_, tile_size_);
-  DEBUG_PRINT("Actual index: " << actual_idx);
 
   // read the entry from raw_db_file
   std::ifstream in_file(RAW_DB_FILE, std::ios::binary);
@@ -471,6 +530,7 @@ std::vector<seal::Ciphertext> PirServer::make_query(const uint32_t client_id, Pi
   // Evaluate the first dimension
   auto first_dim_start = CURR_TIME;
   std::vector<seal::Ciphertext> result = evaluate_first_dim(query_vector);
+  // std::vector<seal::Ciphertext> result = evaluate_first_dim_no_tiling(query_vector);
   auto first_dim_end = CURR_TIME;
 
   // Evaluate the other dimensions

@@ -195,10 +195,7 @@ size_t entry_idx_to_actual(const size_t entry_idx, const size_t fst_dim_sz, cons
   size_t k = entry_idx / other_dim_sz;
   size_t j = entry_idx % other_dim_sz;
 
-  DEBUG_PRINT("j: " << j << " k: " << k);
-  DEBUG_PRINT("intermediate: " << k + j * fst_dim_sz);
-
-  return other_dim_sz * tile_size * (k / tile_size) + j * tile_size + k % tile_size;
+  return other_dim_sz * tile_size * (k / tile_size) + j * tile_size + k % tile_size; // special design for tiling
   // return k + j * fst_dim_sz;
 }
 

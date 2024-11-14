@@ -77,7 +77,7 @@ private:
   PirParams pir_params_;
   std::vector<uint64_t> mu_values_; // Barret reduction parameters
   size_t hashed_key_width_;
-  size_t tile_size_ = 32; // TODO: make this configurable
+  size_t tile_size_ = 64; // TODO: make this configurable
 
   /*!
     Expands the first query ciphertext into a selection vector of ciphertexts
@@ -90,6 +90,7 @@ private:
   */
   std::vector<seal::Ciphertext> evaluate_first_dim(std::vector<seal::Ciphertext> &selection_vector);
   std::vector<seal::Ciphertext> evaluate_first_dim_direct_mod(std::vector<seal::Ciphertext> &selection_vector);
+  std::vector<seal::Ciphertext> evaluate_first_dim_no_tiling(std::vector<seal::Ciphertext> &selection_vector);
 
   /*!
     Transforms the plaintexts in the database into their NTT representation.
