@@ -2,44 +2,15 @@
 #include "external_prod.h"
 #include "pir.h"
 #include "server.h"
+#include "client.h"
 #include "utils.h"
 #include <cassert>
 #include <iostream>
 #include <bitset>
-#include <fstream>
-
-// "Default" Parameters for the PIR scheme
-#define DB_SZ             1 << 18       // Database size <==> Number of plaintexts in the database
-#define NUM_ENTRIES       1 << 18       // Number of entries in the database, can be less than DB_SZ
-#define GSW_L             4             // Parameter for GSW scheme. 
-#define GSW_L_KEY         9             // GSW for query expansion
-#define FST_DIM_SZ        256           // Number of dimensions of the hypercube
-#define PT_MOD_WIDTH      49            // Width of the plain modulus 
-#define CT_MODS	         {60, 60, 60}   // Coeff modulus for the BFV scheme
 
 
-// // "Small" Parameters for the PIR scheme
-// #define DB_SZ             1 << 18       // Database size <==> Number of plaintexts in the database
-// #define NUM_ENTRIES       1 << 18       // Number of entries in the database, can be less than DB_SZ
-// #define GSW_L             5             // Parameter for GSW scheme. 
-// #define GSW_L_KEY         20             // GSW for query expansion
-// #define FST_DIM_SZ        256           // Number of dimensions of the hypercube
-// #define PT_MOD_WIDTH      17            // Width of the plain modulus 
-// #define CT_MODS	         {60, 60}   // Coeff modulus for the BFV scheme
-
-
-// // "warmup" parameters
-// #define DB_SZ             1 << 16       // Database size <==> Number of plaintexts in the database
-// #define NUM_ENTRIES       1 << 16       // Number of entries in the database, can be less than DB_SZ
-// #define GSW_L             5             // Parameter for GSW scheme. 
-// #define GSW_L_KEY         20             // GSW for query expansion
-// #define FST_DIM_SZ        2           // Number of dimensions of the hypercube
-// #define PT_MOD_WIDTH      17            // Width of the plain modulus 
-// #define CT_MODS	         {60, 60}   // Coeff modulus for the BFV scheme
-
-
-#define EXPERIMENT_ITERATIONS 3
-#define WARMUP_ITERATIONS     0
+#define EXPERIMENT_ITERATIONS 10
+#define WARMUP_ITERATIONS     3
 
 void print_func_name(std::string func_name) {
 #ifdef _DEBUG
@@ -59,12 +30,9 @@ void run_tests() {
   // test_external_product();
   // test_ct_sub();
   // serialization_example();
+  // test_plain_to_gsw();
 
   test_pir();
-  // find_best_params();
-  // test_cuckoo_keyword_pir(); // single server version
-
-  // test_plain_to_gsw();
   // test_prime_gen();
 
   PRINT_BAR;
@@ -119,9 +87,8 @@ void bfv_example() {
 // This is a BFV x GSW example
 void test_external_product() {
   print_func_name(__FUNCTION__);
-  // PirParams pir_params(256, 2, 20000, 5, 15, 15);
-  PirParams pir_params(DB_SZ, FST_DIM_SZ, NUM_ENTRIES, GSW_L, GSW_L_KEY, PT_MOD_WIDTH, CT_MODS);
-  pir_params.print_values();
+  PirParams pir_params;
+  pir_params.print_params();
   auto parms = pir_params.get_seal_params();    // This parameter is set to be: seal::scheme_type::bfv
   auto context_ = seal::SEALContext(parms);   // Then this context_ knows that it is using BFV scheme
   auto evaluator_ = seal::Evaluator(context_);
@@ -193,7 +160,7 @@ void test_external_product() {
 // Please use -DSEAL_THROW_ON_TRANSPARENT_CIPHERTEXT=OFF flag when compiling SEAL.
 void test_ct_sub() {
   print_func_name(__FUNCTION__);
-  PirParams pir_params(DB_SZ, FST_DIM_SZ, NUM_ENTRIES, GSW_L, GSW_L_KEY, PT_MOD_WIDTH, CT_MODS);
+  PirParams pir_params;
   auto parms = pir_params.get_seal_params();    // This parameter is set to be: seal::scheme_type::bfv
   auto context_ = seal::SEALContext(parms);
   auto evaluator_ = seal::Evaluator(context_);
@@ -231,7 +198,7 @@ void test_ct_sub() {
 
 
 void serialization_example() {
-  PirParams pir_params(DB_SZ, FST_DIM_SZ, NUM_ENTRIES, GSW_L, GSW_L_KEY, PT_MOD_WIDTH, CT_MODS);
+  PirParams pir_params;
   const auto params = pir_params.get_seal_params();
   const auto context_ = seal::SEALContext(params);
   const auto evaluator_ = seal::Evaluator(context_);
@@ -315,16 +282,14 @@ void test_pir() {
   auto success_count = 0;
   
   // ============== setting parameters for PIR scheme ==============
-  PirParams pir_params(DB_SZ, FST_DIM_SZ, NUM_ENTRIES, GSW_L,
-                       GSW_L_KEY, PT_MOD_WIDTH, CT_MODS);
-  pir_params.print_values();
+  PirParams pir_params;
+  pir_params.print_params();
   PirServer server(pir_params); // Initialize the server with the parameters
-
+  
   BENCH_PRINT("Initializing server...");
   // Data to be stored in the database.
   server.gen_data();
   BENCH_PRINT("Server initialized");
-
 
   // some global results
   size_t galois_key_size = 0;
@@ -422,100 +387,6 @@ void test_pir() {
   BENCH_PRINT("Throughput: " << pir_params.get_DBSize_MB() / (static_cast<double>(avg_server_time) / 1000) << " MB/s");
   BENCH_PRINT("Success rate: " << success_count << "/" << EXPERIMENT_ITERATIONS);
 }
-
-
-// void find_best_params() {
-//   print_func_name(__FUNCTION__);
-
-//   // open a file to write the results
-//   std::ofstream file;
-//   file.open("../outputs/best_param.txt");
-//   file << "l, l_key, server_time, all_success" << std::endl;
-
-//   for (size_t curr_l_key = 13; curr_l_key < 20; ++curr_l_key) {
-//     for (size_t curr_l = 7; curr_l < 13; ++curr_l) {
-//       // setting parameters for PIR scheme
-//       PirParams pir_params(DB_SZ, FST_DIM_SZ, NUM_ENTRIES, curr_l, curr_l_key,
-//                             PT_MOD_WIDTH, CT_MODS);
-//       pir_params.print_values();
-//       PirServer server(pir_params);
-
-//       DEBUG_PRINT("Initializing server...");
-//       // Data to be stored in the database.
-//       std::vector<Entry> data = server.gen_data();
-//       DEBUG_PRINT("Server initialized");
-
-//       auto server_time_sum = 0;
-//       bool all_success = true;
-//       int end_iter = EXPERIMENT_ITERATIONS;
-//       // Run the query process many times.
-//       for (int i = 0; i < EXPERIMENT_ITERATIONS; i++) {
-        
-//         // ============= OFFLINE PHASE ==============
-//         // Initialize the client
-//         PirClient client(pir_params);
-//         const int client_id = rand();
-//         std::stringstream galois_key_stream, gsw_stream, data_stream;
-
-//         // Client create galois keys and gsw keys and writes to the stream (to the server)
-//         size_t galois_key_size = client.create_galois_keys(galois_key_stream);
-//         size_t gsw_key_size = client.write_gsw_to_stream(
-//             client.generate_gsw_from_key(), gsw_stream);
-//         //--------------------------------------------------------------------------------
-//         server.decryptor_ = client.get_decryptor();
-//         // Server receives the gsw keys and galois keys and loads them when needed
-//         server.set_client_galois_key(client_id, galois_key_stream);
-//         server.set_client_gsw_key(client_id, gsw_stream);
-
-//         // ===================== ONLINE PHASE =====================
-//         // Client start generating query
-//         size_t entry_index = rand() % pir_params.get_num_entries();
-
-//         // ============= CLIENT ===============
-//         PirQuery query = client.generate_query(entry_index);
-//         auto query_size = client.write_query_to_stream(query, data_stream);
-        
-//         // ============= SERVER ===============
-//         auto s_start_time = CURR_TIME;  // server start time for processing the query
-//         auto result = server.make_seeded_query(client_id, data_stream);
-//         auto s_end_time = CURR_TIME;
-        
-//         // client gets result from the server and decrypts it
-//         auto decrypted_result = client.decrypt_result(result);
-//         Entry entry = client.get_entry_from_plaintext(entry_index, decrypted_result[0]);
-
-//         // ================== Record the results ==================
-//         std::cout << "Experiment [" << i
-//                   << "]\tServer time: " << TIME_DIFF(s_start_time, s_end_time)
-//                   << " ms" << std::endl;
-//         server_time_sum += TIME_DIFF(s_start_time, s_end_time);
-
-//         if (entry == data[entry_index]) {
-//           // print a green success message
-//           std::cout << "\033[1;32mSuccess!\033[0m" << std::endl;
-//         } else {
-//           // print a red failure message
-//           std::cout << "\033[1;31mFailure!\033[0m" << std::endl;
-//           all_success = false;
-//           end_iter = i + 1;
-//           break;
-//         }
-//       }
-
-//       // record the data
-//       file << curr_l << " " << curr_l_key << " "
-//             << server_time_sum / end_iter << " "
-//             << " " << all_success << std::endl;
-
-//       std::cout << "Average server time: " << server_time_sum / end_iter
-//                 << " ms" << std::endl;
-//     }
-//   }
-
-//   // close the file
-//   file.close();
-
-// }
 
 void test_prime_gen() {
   print_func_name(__FUNCTION__);

@@ -5,9 +5,9 @@
 
 
 PirClient::PirClient(const PirParams &pir_params)
-    : params_(pir_params.get_seal_params()), DBSize_(pir_params.get_DBSize()),
+    : enc_params_(pir_params.get_seal_params()),
       dims_(pir_params.get_dims()), pir_params_(pir_params) {
-  context_ = new seal::SEALContext(params_);
+  context_ = new seal::SEALContext(enc_params_);
   evaluator_ = new seal::Evaluator(*context_);
   keygen_ = new seal::KeyGenerator(*context_);
   secret_key_ = &keygen_->secret_key();
@@ -31,8 +31,8 @@ std::vector<Ciphertext> PirClient::generate_gsw_from_key() {
   const auto ntt_tables = context_->first_context_data()->small_ntt_tables();
   const auto coeff_modulus = context_->first_context_data()->parms().coeff_modulus();
   const auto coeff_mod_count = coeff_modulus.size();
-  const auto coeff_count = params_.poly_modulus_degree();
-  std::vector<uint64_t> sk_ntt(params_.poly_modulus_degree() * coeff_mod_count);
+  const auto coeff_count = enc_params_.poly_modulus_degree();
+  std::vector<uint64_t> sk_ntt(enc_params_.poly_modulus_degree() * coeff_mod_count);
 
   memcpy(sk_ntt.data(), sk_.data(), coeff_count * coeff_mod_count * sizeof(uint64_t));
 
@@ -50,12 +50,12 @@ size_t PirClient::get_database_plain_index(size_t entry_index) {
 std::vector<size_t> PirClient::get_query_indices(size_t plaintext_index) {
   std::vector<size_t> query_indices;
   size_t index = plaintext_index;
-  size_t size_of_remaining_dims = DBSize_;
+  size_t remain_pt_num = pir_params_.get_num_pt();
 
   for (auto dim_size : dims_) {
-    size_of_remaining_dims /= dim_size;
-    query_indices.push_back(index / size_of_remaining_dims);
-    index = index % size_of_remaining_dims;
+    remain_pt_num /= dim_size;
+    query_indices.push_back(index / remain_pt_num);
+    index = index % remain_pt_num;
   }
 
   return query_indices;
@@ -68,18 +68,17 @@ PirQuery PirClient::generate_query(const std::uint64_t entry_index) {
   const size_t plaintext_index = get_database_plain_index(entry_index);
   std::vector<size_t> query_indices = get_query_indices(plaintext_index);
   PRINT_INT_ARRAY("\t\tquery_indices", query_indices.data(), query_indices.size());
-  const uint64_t coeff_count = params_.poly_modulus_degree(); // 4096
   const uint64_t msg_size = dims_[0] + pir_params_.get_l() * (dims_.size() - 1);
   const uint64_t bits_per_ciphertext = 1 << get_expan_height(); // padding msg_size to the next power of 2
 
   // Algorithm 1 from the OnionPIR Paper
 
   // empty plaintext
-  seal::Plaintext plain_query(coeff_count); // we allow 4096 coefficients in the plaintext polynomial to be set as suggested in the paper.
+  seal::Plaintext plain_query(DatabaseConstants::PolyDegree); // we allow 4096 coefficients in the plaintext polynomial to be set as suggested in the paper.
   // We set the corresponding coefficient to the inverse so the value of the
   // expanded ciphertext will be 1
   uint64_t inverse = 0;
-  uint64_t plain_modulus = params_.plain_modulus().value(); // example: 16777259
+  const uint64_t plain_modulus = enc_params_.plain_modulus().value(); // example: 16777259
   seal::util::try_invert_uint_mod(bits_per_ciphertext, plain_modulus, inverse);
 
   // Add the first dimension query vector to the query
@@ -106,7 +105,10 @@ PirQuery PirClient::generate_query(const std::uint64_t entry_index) {
   // coeff_mod_count many rows, each row is B^{l-1},, ..., B^0 under different moduli
   std::vector<std::vector<uint64_t>> gadget = gsw_gadget(l, base_log2, coeff_mod_count, coeff_modulus);
 
-
+  // no further dimensions
+  if (query_indices.size() == 1) {
+    return query;
+  }
   // This for-loop corresponds to the for-loop in Algorithm 1 from the OnionPIR paper
   auto q_head = query.data(0); // points to the first coefficient of the first ciphertext(c0) 
   for (int i = 1; i < query_indices.size(); i++) {  // dimensions
@@ -117,7 +119,7 @@ PirQuery PirClient::generate_query(const std::uint64_t entry_index) {
       // ! pt is a ct_coeff_type *. It points to the current position to be written.
       for (int k = 0; k < l; k++) {
         for (int mod_id = 0; mod_id < coeff_mod_count; mod_id++) {
-          auto pad = mod_id * coeff_count;   // We use two moduli for the same gadget value. They are apart by coeff_count.
+          auto pad = mod_id * DatabaseConstants::PolyDegree;   // We use two moduli for the same gadget value. They are apart by coeff_count.
           auto coef_pos = dims_[0] + (i-1) * l + k + pad;  // the position of the coefficient in the query
           uint128_t mod = coeff_modulus[mod_id].value();
           // the coeff is (B^{l-1}, ..., B^0) / bits_per_ciphertext
@@ -144,46 +146,6 @@ size_t PirClient::write_gsw_to_stream(const std::vector<Ciphertext> &gsw, std::s
   return total_size;
 }
 
-
-/**
- * @brief Generate two queries in cuckoo hashing 
- * 
- * @param seed1 seed for the first hash function
- * @param seed2 seed for the second hash function
- * @param table_size used to calculate the index
- * @param keyword keyword to be searched
- * @return std::vector<PirQuery> two queries generated
- */
-std::vector<PirQuery> PirClient::generate_cuckoo_query(uint64_t seed1, uint64_t seed2, uint64_t table_size, Key keyword) {
-  size_t index1 = std::hash<Key>{}(keyword ^ seed1) % table_size;
-  size_t index2 = std::hash<Key>{}(keyword ^ seed2) % table_size;
-  PirQuery query1 = PirClient::generate_query(index1);
-  PirQuery query2 = PirClient::generate_query(index2);
-  return {query1, query2};
-}
-
-void PirClient::cuckoo_process_reply(uint64_t seed1, uint64_t seed2, uint64_t table_size, Key keyword, std::vector<seal::Ciphertext> reply1, std::vector<seal::Ciphertext> reply2) {
-  size_t index1 = std::hash<Key>{}(keyword ^ seed1) % table_size;
-  size_t index2 = std::hash<Key>{}(keyword ^ seed2) % table_size;
-  Entry entry1 = PirClient::get_entry_from_plaintext(index1, PirClient::decrypt_result(reply1)[0]);
-  Entry entry2 = PirClient::get_entry_from_plaintext(index2, PirClient::decrypt_result(reply2)[0]);
-  // check which entry has hashed keyword in the first half of the entry
-  size_t hashed_key_width = pir_params_.get_hashed_key_width();
-  if (entry1.size() < hashed_key_width || entry2.size() < hashed_key_width) {
-    throw std::invalid_argument("Entry size is too small");
-  } else {
-    // calculate hashed keyword stored
-    // ! How to calculate hashed keyword not clear. Shouldn't entry look like (hash(keyword)|value)?
-    Entry value = get_value_from_replies(entry1, entry2, keyword, hashed_key_width);
-    if (value.size() == 0) {
-      throw std::invalid_argument("Keyword not found");
-    }
-    DEBUG_PRINT("Printing the value: ")
-    print_entry(value);
-  }
-}
-
-
 size_t PirClient::create_galois_keys(std::stringstream &galois_key_stream) const {
   std::vector<uint32_t> galois_elts;
 
@@ -191,7 +153,7 @@ size_t PirClient::create_galois_keys(std::stringstream &galois_key_stream) const
   // expansion height is the height of the expansion tree such that
   // 2^get_expan_height() is equal to the number of packed values padded to the next power of 2.
   const int expan_height = get_expan_height();
-  const int poly_degree = params_.poly_modulus_degree();
+  const int poly_degree = enc_params_.poly_modulus_degree();
   for (int i = 0; i < expan_height; i++) {
     galois_elts.push_back(1 + (poly_degree >> i));
   }
@@ -201,7 +163,7 @@ size_t PirClient::create_galois_keys(std::stringstream &galois_key_stream) const
 }
 
 std::vector<seal::Plaintext> PirClient::decrypt_result(std::vector<seal::Ciphertext> reply) {
-  std::vector<seal::Plaintext> result(reply.size(), seal::Plaintext(params_.poly_modulus_degree()));
+  std::vector<seal::Plaintext> result(reply.size(), seal::Plaintext(enc_params_.poly_modulus_degree()));
   for (size_t i = 0; i < reply.size(); i++) {
     decryptor_->decrypt(reply[i], result[i]);
   }
@@ -244,28 +206,5 @@ Entry PirClient::get_entry_from_plaintext(size_t entry_index, seal::Plaintext pl
   return result;
 }
 
+uint32_t PirClient::get_client_id() const { return client_id_; }
 
-Entry get_value_from_replies(Entry reply1, Entry reply2, Key keyword, size_t hashed_key_width) {
-  Entry hashed_key = gen_single_key(keyword, hashed_key_width);
-  Entry value;
-  value.reserve(reply1.size() - hashed_key.size());
-
-  // we match the first hashed_key.size() elements of reply1 and reply2 with hashed_key
-  // if the hashed_key matches one of them, we add the corresponding value to the result
-  // If the hashed_key is not found in either, we return an empty entry
-  if (reply1.size() < hashed_key.size() || reply2.size() < hashed_key.size()) {
-    throw std::invalid_argument("Entry size is too small");
-  } else {
-    if (std::equal(hashed_key.begin(), hashed_key.end(), reply1.begin())) {
-      DEBUG_PRINT("Keyword found in reply 1");
-      value.insert(value.end(), reply1.begin() + hashed_key.size(), reply1.end());
-    } else if (std::equal(hashed_key.begin(), hashed_key.end(), reply2.begin())) {
-      DEBUG_PRINT("Keyword found in reply 2");
-      value.insert(value.end(), reply2.begin() + hashed_key.size(), reply2.end());
-    } else {
-      value = {};
-    }
-  }
-
-  return value;
-}

@@ -8,7 +8,6 @@
 #define CURR_TIME std::chrono::high_resolution_clock::now()
 #define TIME_DIFF(start, end) std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()
 
-
 // print for debug. Easily turn on/off by defining _DEBUG
 #ifdef _DEBUG
 #define DEBUG_PRINT(s) std::cout << s << std::endl;
@@ -35,21 +34,7 @@ typedef uint64_t Key; // key in the key-value pair.
 // ================== CLASS DEFINITIONS ==================
 class PirParams {
 public:
-  /*!
-  PirParams constructor.
-  @param DBSize - Number of plaintexts in database
-  @param first_dim_sz - Size of the first dimension of the database
-  @param num_entries - Number of entries that will be stored in the database
-  @param l - Parameter l for GSW scheme
-  @param hashed_key_width - width of the hashed key in bits. Default is 0, stands for no keyword support.
-  @param blowup_factor - blowup factor for the database used in keyword support. Default is 1.0.
-  */
-  PirParams(const uint64_t DBSize, const uint64_t first_dim_sz,
-            const uint64_t num_entries,
-            const uint64_t l, const uint64_t l_key,
-            const size_t plain_mod_width, const std::vector<int> ct_mods, const size_t hashed_key_width = 0,
-            const float blowup_factor = 1.0);
-
+  PirParams();
 
   // ================== getters ==================
   /**
@@ -65,34 +50,29 @@ public:
    */
   size_t get_num_bits_per_plaintext() const;
   seal::EncryptionParameters get_seal_params() const;
-  uint64_t get_DBSize() const;
   double get_DBSize_MB() const;
-  size_t get_num_entries() const;
-  size_t get_entry_size() const;
-  std::vector<uint64_t> get_dims() const;
-  uint64_t get_l() const;
-  uint64_t get_l_key() const;
-  uint64_t get_base_log2() const;
-  size_t get_hashed_key_width() const;
-  float get_blowup_factor() const;
+  inline size_t get_num_entries() const { return num_entries_; }
+  inline size_t get_num_pt() const { return num_pt_; }
+  inline size_t get_entry_size() const { return entry_size_; }
+  inline std::vector<size_t> get_dims() const { return dims_; }
+  inline size_t get_l() const { return l_; }
+  inline size_t get_l_key() const { return l_key_; }
+  inline size_t get_base_log2() const { return base_log2_; }
+  // In terms of number of plaintexts
+  inline size_t get_fst_dim_sz() const { return dims_[0]; }
+  // In terms of number of plaintexts
+  // when other_dim_sz == 1, it means we only use the first dimension.
+  inline size_t get_other_dim_sz() const { return num_pt_ / dims_[0]; }
 
-
-  void print_values() const;
+  void print_params() const;
 
 private:
-  uint64_t DBSize_;            // number of plaintexts in the database
-  uint64_t l_;                 // l for RGSW
-  uint64_t l_key_;             // l for key RGSW
-  uint64_t base_log2_;         // log of base for RGSW
-  std::vector<uint64_t> dims_; // Number of dimensions
-  size_t num_entries_;         // Number of entries in database
-  size_t entry_size_;          // Size of single entry in bytes
+  static constexpr size_t l_ = DatabaseConstants::GSW_L;                  // l for GSW
+  static constexpr size_t l_key_ = DatabaseConstants::GSW_L_KEY;          // l for GSW key
+  size_t num_entries_ = DatabaseConstants::NumEntries;  // number of entries in the database. Will be padded to multiples of other dimension size.
+  size_t num_pt_;            // number of plaintexts in the database
+  size_t entry_size_;    // size of each entry in bytes
+  size_t base_log2_;         // log of base for RGSW
+  std::vector<size_t> dims_; // Number of dimensions
   seal::EncryptionParameters seal_params_;
-  size_t hashed_key_width_;
-  float blowup_factor_;
 };
-
-// ================== HELPER FUNCTIONS ==================
-
-// Given a key_id and the hashed_key_width, generate a random key using random number generator.
-std::vector<uint8_t> gen_single_key(uint64_t key_id, size_t hashed_key_width);

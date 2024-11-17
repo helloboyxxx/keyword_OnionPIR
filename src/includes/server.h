@@ -1,6 +1,5 @@
 #pragma once
 
-#include "client.h"
 #include "external_prod.h"
 #include "pir.h"
 #include <optional>
@@ -33,7 +32,7 @@ public:
   // push one chunk of entry to the given database
   void push_database_chunk(std::vector<Entry> &chunk_entry, const size_t chunk_idx);
 
-  std::vector<uint64_t> get_dims() const;
+  std::vector<size_t> get_dims() const;
 
   // Given the client id and a packed client query, this function first unpacks the query, then returns the retrieved encrypted result.
   std::vector<seal::Ciphertext> make_query(const uint32_t client_id, PirQuery &&query);
@@ -66,18 +65,15 @@ public:
   friend class PirTest;
 
 private:
-  uint64_t DBSize_;
+  size_t num_pt_;
   seal::SEALContext context_;
   seal::Evaluator evaluator_;
-  std::vector<uint64_t> dims_;
+  std::vector<size_t> dims_;
   std::map<uint32_t, seal::GaloisKeys> client_galois_keys_;
   std::map<uint32_t, GSWCiphertext> client_gsw_keys_;
   Database db_; // pointer to the entire database vector
   std::vector<uint128_t> inter_res; // pointer to the intermediate result vector for fst dim
   PirParams pir_params_;
-  std::vector<uint64_t> mu_values_; // Barret reduction parameters
-  size_t hashed_key_width_;
-  size_t tile_size_ = 64; // TODO: make this configurable
 
   /*!
     Expands the first query ciphertext into a selection vector of ciphertexts
@@ -104,39 +100,3 @@ private:
   // write one chunk of the database to a binary file in CACHE_DIR
   void write_one_chunk(std::vector<Entry> &chunk);
 };
-
-// ================== HELPER FUNCTIONS ==================
-
-/**
-* @brief Given an entry id and the length of the entry, generate a random entry using random number generator.
-* 
-* @param id entry id. This will be used as a seed for generating the entry randomly.
-* @param len length(size) of the entry. Each entry is a vector of bytes.
-* @return Entry 
-*/
-Entry generate_entry(const uint64_t id, const size_t entry_size, std::ifstream &random_file);
-
-/**
- * @brief Generate an entry with a key_id. This will be used as a seed for
- * generating the hashed_key. Note that in reality, the value is not randomly
- * generated. But here, for now, we generate the value randomly using the same seed.
- * ! One should modify this fucntion to generate the value using different seeds / methods.
- * entry_size - hashed_key_width = value_size is the only limit for the generated value.
- * @return Entry
- */
-Entry generate_entry_with_key(uint64_t key_id, size_t entry_size, size_t hashed_key_width);
-
-
-/**
- * @brief Create a new cuckoo hashing table. Insert all keywords into the table using cuckoo hashing. 
- * 
- * @param seed1 cuckoo seed 1
- * @param seed2 cuckoo seed 2
- * So either hash(keyword_seed ^ seed2) or hash(keyword_seed ^ seed2) points to the correct location in the hashing table.
- * @param swap_limit maximum number of swaps allowed for inserting a single entry into the hashing table.
- * @param keywords existing keywords to be inserted into the hashing table. 
- * @param blowup_factor decides the size of the hashing table. The size of the hashing table is blowup_factor * data.size().
- * @return std::vector<Entry> Return the non-empty hashing table if the insertion is successful. Otherwise, return an empty vector.
- */
-std::vector<Key> cuckoo_insert(uint64_t seed1, uint64_t seed2, size_t swap_limit,
-                                 std::vector<Key> &keywords, float blowup_factor);

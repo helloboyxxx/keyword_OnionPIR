@@ -186,16 +186,21 @@ bool entry_is_equal(const Entry &entry1, const Entry &entry2) {
   return true;
 }
 
-size_t entry_idx_to_actual(const size_t entry_idx, const size_t fst_dim_sz, const size_t db_sz, const size_t tile_size) {
-  // compute N / N_1
-  size_t other_dim_sz = db_sz / fst_dim_sz;
-
+size_t poly_idx_to_actual(const size_t poly_idx, const size_t fst_dim_sz, const size_t other_dim_sz) {
   // we remap (N/N_1) * k + j to k + j * N_1. 
   // Then k + j * N_1 is again remapped to (N/N_1)*k * (k/t) + j*t + k mod t
-  size_t k = entry_idx / other_dim_sz;
-  size_t j = entry_idx % other_dim_sz;
+  size_t k = poly_idx / other_dim_sz;
+  size_t j = poly_idx % other_dim_sz;
 
-  return other_dim_sz * tile_size * (k / tile_size) + j * tile_size + k % tile_size; // special design for tiling
+  auto ts = DatabaseConstants::TileSz;
+  auto max_mult_of_ts = (fst_dim_sz / ts) * ts;
+  auto remain_fst_dim_sz = fst_dim_sz % ts;
+  if (k < max_mult_of_ts) {
+    return other_dim_sz * ts * (k / ts) + j * ts + k % ts;
+  } else {
+    return other_dim_sz * max_mult_of_ts + j * remain_fst_dim_sz + k - max_mult_of_ts;
+  }
+
   // return k + j * fst_dim_sz;
 }
 
@@ -211,4 +216,27 @@ void print_progress(size_t current, size_t total) {
   }
   std::cout << "] " << int(progress * 100.0) << " %\r";
   std::cout.flush();
+}
+
+
+Entry generate_entry(const uint64_t entry_id, const size_t entry_size, std::ifstream &random_file) {
+  Entry entry(entry_size);
+  random_file.read(reinterpret_cast<char *>(entry.data()), entry_size);
+  return entry;
+}
+
+
+size_t next_pow_of_2(const size_t n) {
+  size_t p = 1;
+  while (p < n) {
+    p <<= 1;
+  }
+  return p;
+}
+
+size_t roundup_div(const size_t numerator, const size_t denominator) {
+  if (denominator == 0) {
+    throw std::invalid_argument("roundup_div division by zero");
+  }
+  return (numerator + denominator - 1) / denominator;
 }

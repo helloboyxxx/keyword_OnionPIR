@@ -131,6 +131,21 @@ bool entry_is_equal(const Entry &entry1, const Entry &entry2);
 
 // logical entry index to the actuall index in the database.
 // This is a trick we do for reducing the miss cache rate when evaluating the first dimension.
-size_t entry_idx_to_actual(const size_t entry_idx, const size_t fst_dim_sz, const size_t db_sz, const size_t tile_size);
+size_t poly_idx_to_actual(const size_t entry_idx, const size_t fst_dim_sz, const size_t other_dim_sz);
 
 void print_progress(size_t current, size_t total);
+
+/**
+* @brief Given an entry id and the length of the entry, generate a random entry using random number generator.
+* 
+* @param entry_id entry id. Not used in implementation, but can be useful if we want to generate entries with specific ids.
+* @param len length(size) of the entry. Each entry is a vector of bytes.
+* @param random_file random file for quick entry generation.
+* @return Entry 
+*/
+Entry generate_entry(const uint64_t entry_id, const size_t entry_size, std::ifstream &random_file);
+
+
+size_t next_pow_of_2(const size_t n);
+
+size_t roundup_div(const size_t numerator, const size_t denominator);
